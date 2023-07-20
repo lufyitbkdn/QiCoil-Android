@@ -43,11 +43,11 @@ class MusicRepository(private val data: List<Track>) {
             val trackId: Int,
             val title: String,
             val artist: String,
+            val albumId: Int,
             val album: Album,
             val resId: Int,
-            val uri: Uri,
             var duration: Long,
             var position: Long,
-            var multiplay: Int
+            var filename: String
     )
 }

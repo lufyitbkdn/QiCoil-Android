@@ -37,6 +37,9 @@ interface AlbumDao {
     @Query("SELECT * FROM album WHERE id=:id ORDER BY `order` ASC")
     fun getAlbumsById(id: Int) : LiveData<Album>?
 
+    @Query("SELECT * FROM album WHERE id=:id ORDER BY `order` ASC")
+    suspend fun getAlbumsByIdOnce(id: Int) : Album?
+
     @Query("UPDATE album SET isDownloaded=:isDownloaded WHERE id=:id")
     suspend fun isAlbumDownloaded(isDownloaded: Boolean, id: Int)
 

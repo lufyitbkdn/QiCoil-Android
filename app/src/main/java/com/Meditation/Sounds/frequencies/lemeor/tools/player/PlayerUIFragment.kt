@@ -28,21 +28,79 @@ import org.greenrobot.eventbus.EventBus
 class PlayerUIFragment : NewBaseFragment() {
     private var playerServiceBinder: PlayerService.PlayerServiceBinder? = null
     private var mediaController: MediaControllerCompat? = null
-    private var callback: MediaControllerCompat.Callback? = null
-    private var serviceConnection: ServiceConnection? = null
+    private var callback: MediaControllerCompat.Callback =
+        object : MediaControllerCompat.Callback() {
+            override fun onPlaybackStateChanged(state: PlaybackStateCompat?) {
+                if (state == null) return
+                playing = state.state == PlaybackStateCompat.STATE_PLAYING
+                player_play?.post {
+                    if (playing) {
+                        player_play.setImageDrawable(
+                            getDrawable(
+                                requireContext(),
+                                R.drawable.oc_pause_song
+                            )
+                        )
+                    } else {
+                        player_play.setImageDrawable(
+                            getDrawable(
+                                requireContext(),
+                                R.drawable.ic_play_song
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    private var serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            playerServiceBinder = binder as PlayerService.PlayerServiceBinder
+            try {
+                mediaController = MediaControllerCompat(
+                    requireContext(),
+                    playerServiceBinder!!.mediaSessionToken
+                )
+                mediaController?.registerCallback(callback)
+                callback.onPlaybackStateChanged(mediaController!!.playbackState)
+
+                if (mediaController != null) {
+                    if (playing) mediaController?.transportControls?.pause()
+                    else mediaController?.transportControls?.play()
+                }
+            } catch (e: RemoteException) {
+                mediaController = null
+            }
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            playerServiceBinder = null
+            mediaController?.unregisterCallback(callback)
+            mediaController = null
+        }
+    }
     private var playing: Boolean = false
     private var repeat: Int = Player.REPEAT_MODE_ONE
     private var shuffle: Boolean = false
 
     override fun onCreateView(
-            inflater: LayoutInflater, container: ViewGroup?,
-            savedInstanceState: Bundle?
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
     ): View? {
         return inflater.inflate(R.layout.player_ui_fragment, container, false)
     }
 
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        super.onActivityCreated(savedInstanceState)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        requireContext().bindService(
+            Intent(requireContext(), PlayerService::class.java),
+            serviceConnection as ServiceConnection,
+            AppCompatActivity.BIND_AUTO_CREATE
+        )
+    }
+
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         playerInit()
         setListeners()
     }
@@ -53,12 +111,14 @@ class PlayerUIFragment : NewBaseFragment() {
 
             loadImage(requireContext(), track_image, it.album)
             Log.i("currenttracl", "t-->" + it.duration)
-            seekBar.max = it.duration.toInt()
         }
 
         currentPosition.observe(viewLifecycleOwner) {
             track_position.text = getConvertedTime(it)
             seekBar.progress = it.toInt()
+        }
+        max.observe(viewLifecycleOwner) {
+            seekBar.max = it.toInt()
         }
 
         duration.observe(viewLifecycleOwner) {
@@ -77,46 +137,9 @@ class PlayerUIFragment : NewBaseFragment() {
     }
 
     private fun playerInit() {
-        callback = object : MediaControllerCompat.Callback() {
-            override fun onPlaybackStateChanged(state: PlaybackStateCompat?) {
-                if (state == null) return
-                playing = state.state == PlaybackStateCompat.STATE_PLAYING
-
-                if (playing) {
-                    player_play.setImageDrawable(getDrawable(requireContext(), R.drawable.oc_pause_song))
-                } else {
-                    player_play.setImageDrawable(getDrawable(requireContext(), R.drawable.ic_play_song))
-                }
-            }
-        }
-
-        serviceConnection = object : ServiceConnection {
-            override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-                playerServiceBinder = binder as PlayerService.PlayerServiceBinder
-                try {
-                    mediaController = MediaControllerCompat(requireContext(), playerServiceBinder!!.mediaSessionToken)
-                    mediaController!!.registerCallback(callback as MediaControllerCompat.Callback)
-                    callback!!.onPlaybackStateChanged(mediaController!!.playbackState)
-
-                    if (mediaController != null)
-                        if (playing) mediaController!!.transportControls.pause()
-                        else mediaController!!.transportControls.play()
-                } catch (e: RemoteException) {
-                    mediaController = null
-                }
-            }
-
-            override fun onServiceDisconnected(name: ComponentName?) {
-                playerServiceBinder = null
-                mediaController?.unregisterCallback(callback as MediaControllerCompat.Callback)
-                mediaController = null
-            }
-        }
-
-        requireContext().bindService(Intent(requireContext(), PlayerService::class.java), serviceConnection as ServiceConnection, AppCompatActivity.BIND_AUTO_CREATE)
-
         player_play.setOnClickListener {
-            val rotation: Animation = AnimationUtils.loadAnimation(requireContext(), R.anim.clockwise_rotation)
+            val rotation: Animation =
+                AnimationUtils.loadAnimation(requireContext(), R.anim.clockwise_rotation)
             rotation.repeatCount = Animation.INFINITE
             player_repeat.clearAnimation()
             if (mediaController != null)
@@ -126,7 +149,7 @@ class PlayerUIFragment : NewBaseFragment() {
                 } else {
                     isUserPaused = false
                     mediaController?.transportControls?.play()
-                    if (repeat ==  Player.REPEAT_MODE_ALL) {
+                    if (repeat == Player.REPEAT_MODE_ALL) {
                         player_repeat.startAnimation(rotation)
                     }
                 }
@@ -155,7 +178,8 @@ class PlayerUIFragment : NewBaseFragment() {
         }
 
         player_repeat.setOnClickListener {
-            val rotation: Animation = AnimationUtils.loadAnimation(requireContext(), R.anim.clockwise_rotation)
+            val rotation: Animation =
+                AnimationUtils.loadAnimation(requireContext(), R.anim.clockwise_rotation)
             rotation.repeatCount = Animation.INFINITE
             player_repeat.clearAnimation()
             when (repeat) {
@@ -163,6 +187,7 @@ class PlayerUIFragment : NewBaseFragment() {
                     repeat = Player.REPEAT_MODE_ONE
                     player_repeat.setImageResource(R.drawable.ic_loop_one)
                 }
+
                 Player.REPEAT_MODE_ONE -> {
                     repeat = Player.REPEAT_MODE_ALL
                     player_repeat.setImageResource(R.drawable.ic_loop_all)
@@ -170,6 +195,7 @@ class PlayerUIFragment : NewBaseFragment() {
                         player_repeat.startAnimation(rotation)
                     }
                 }
+
                 Player.REPEAT_MODE_ALL -> {
                     repeat = Player.REPEAT_MODE_OFF
                     player_repeat.setImageResource(R.drawable.ic_loop_off)
@@ -184,7 +210,7 @@ class PlayerUIFragment : NewBaseFragment() {
         if (mediaController != null)
             mediaController?.transportControls?.stop()
         playerServiceBinder = null
-        callback?.let { mediaController?.unregisterCallback(it) }
+        mediaController?.unregisterCallback(callback)
         mediaController = null
         serviceConnection?.let { requireContext().unbindService(it) }
     }

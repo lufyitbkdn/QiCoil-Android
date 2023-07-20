@@ -10,8 +10,10 @@ import android.os.CountDownTimer;
 import android.os.StrictMode;
 import android.view.WindowManager;
 
+import androidx.annotation.NonNull;
 import androidx.multidex.MultiDex;
 import androidx.multidex.MultiDexApplication;
+import androidx.work.Configuration;
 
 import com.Meditation.Sounds.frequencies.api.ApiListener;
 import com.Meditation.Sounds.frequencies.db.QFDatabase;
@@ -34,7 +36,7 @@ import java.util.ArrayList;
 import java.util.Timer;
 import java.util.TimerTask;
 
-public class QApplication extends MultiDexApplication implements ApiListener {
+public class QApplication extends MultiDexApplication implements ApiListener, Configuration.Provider {
     private static QApplication INSTANCE;
     private int APP_VERSION = 12;
     private ArrayList<BaseActivity> mStacksActivity;
@@ -78,7 +80,7 @@ public class QApplication extends MultiDexApplication implements ApiListener {
 //            }
 //
 //        }.start();
-       // showAlertDialog(INSTANCE);
+        // showAlertDialog(INSTANCE);
 //        new Timer().schedule(new TimerTask() {
 //            @Override
 //            public void run() {
@@ -87,24 +89,24 @@ public class QApplication extends MultiDexApplication implements ApiListener {
 //        }, 30000);
     }
 
-    public void addActivityToStack(BaseActivity activity){
-        if(mStacksActivity.size() > 0 && mStacksActivity.get(mStacksActivity.size() - 1).getClass() == activity.getClass()){
+    public void addActivityToStack(BaseActivity activity) {
+        if (mStacksActivity.size() > 0 && mStacksActivity.get(mStacksActivity.size() - 1).getClass() == activity.getClass()) {
             return;
         }
         mStacksActivity.add(activity);
     }
 
-    public void removeActivityToStack(BaseActivity activity){
-        if(mStacksActivity.size() > 0 && mStacksActivity.get(mStacksActivity.size() - 1).getClass() == activity.getClass()){
+    public void removeActivityToStack(BaseActivity activity) {
+        if (mStacksActivity.size() > 0 && mStacksActivity.get(mStacksActivity.size() - 1).getClass() == activity.getClass()) {
             mStacksActivity.remove(mStacksActivity.size() - 1);
         }
     }
 
-    public BaseActivity getTopActivity(){
+    public BaseActivity getTopActivity() {
         return mStacksActivity.size() > 0 ? mStacksActivity.get(mStacksActivity.size() - 1) : null;
     }
 
-    public static QApplication getInstance(){
+    public static QApplication getInstance() {
         return INSTANCE;
     }
 
@@ -121,16 +123,16 @@ public class QApplication extends MultiDexApplication implements ApiListener {
             database.playlistItemDAO().clear();
             database.playlistItemSongDAO().clear();
         }
-        if(oldVersion < 10){
+        if (oldVersion < 10) {
             new UpdatePlaylistInforVer10Task(this, this).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
         }
-        if(oldVersion < 11){
+        if (oldVersion < 11) {
             new UpdateDurationOfAllPlaylistTask(this, this).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
         }
-        if(oldVersion < 12){
+        if (oldVersion < 12) {
             PlaylistDAO playlistDao = QFDatabase.getDatabase(this).playlistDAO();
             Playlist playlist = playlistDao.getFirstModifiedPlaylist();
-            if(playlist != null && playlist.getTitle() != null && playlist.getTitle().equalsIgnoreCase("Playlist 1")){
+            if (playlist != null && playlist.getTitle() != null && playlist.getTitle().equalsIgnoreCase("Playlist 1")) {
                 playlistDao.updateFromUserFromId(playlist.getId(), 1);
             }
         }
@@ -155,7 +157,7 @@ public class QApplication extends MultiDexApplication implements ApiListener {
     public void showAlertDialog(Context context) {
         /** define onClickListener for dialog */
         DialogInterface.OnClickListener listener
-                = new   DialogInterface.OnClickListener() {
+                = new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 // do some stuff eg: context.onCreate(super)
@@ -174,5 +176,19 @@ public class QApplication extends MultiDexApplication implements ApiListener {
         dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
         /** show dialog */
         dialog.show();
+    }
+
+    @NonNull
+    @Override
+    public Configuration getWorkManagerConfiguration() {
+        if (BuildConfig.DEBUG) {
+            return new Configuration.Builder()
+                    .setMinimumLoggingLevel(android.util.Log.DEBUG)
+                    .build();
+        } else {
+            return new Configuration.Builder()
+                    .setMinimumLoggingLevel(android.util.Log.ERROR)
+                    .build();
+        }
     }
 }

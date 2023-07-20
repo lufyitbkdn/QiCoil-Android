@@ -2,11 +2,9 @@ package com.Meditation.Sounds.frequencies.lemeor
 
 import android.content.Context
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
 import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
-import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.MutableLiveData
@@ -28,19 +26,16 @@ import java.io.File
 import java.io.IOException
 import java.net.URI
 import java.net.URL
-import java.util.*
 
 
 const val FAVORITES = "Favorites"
 
 var trackList: ArrayList<MusicRepository.Track>? = null
-var downloadedTracks: ArrayList<Track>? = null
-var downloadErrorTracks: ArrayList<String>? = null
 
 val currentTrack = MutableLiveData<MusicRepository.Track>()
 val currentTrackIndex = MutableLiveData<Int>()
 val currentPosition = MutableLiveData<Long>()
-val max = MutableLiveData<Long>()
+val max = MutableLiveData<Long>(0)
 val duration = MutableLiveData<Long>()
 
 //for track add to program
@@ -72,7 +67,10 @@ fun loadImage(context: Context, imageView: ImageView, album: Album) {
             .signature(ObjectKey(album.updated_at))
         Glide.with(context)
             .load(Uri.parse(assetsPath))
-            .thumbnail(Glide.with(context).load(Uri.parse(assetsPath)).apply(RequestOptions().override(300, 300)))
+            .thumbnail(
+                Glide.with(context).load(Uri.parse(assetsPath))
+                    .apply(RequestOptions().override(300, 300))
+            )
             .apply(requestOptions)
             .dontTransform()
             .dontAnimate()
@@ -84,7 +82,9 @@ fun loadImage(context: Context, imageView: ImageView, album: Album) {
             .signature(ObjectKey(album.updated_at))
         Glide.with(context)
             .load(getImageUrl(album))
-            .thumbnail(Glide.with(context).load(assetsPath).apply(RequestOptions().override(300, 300)))
+            .thumbnail(
+                Glide.with(context).load(assetsPath).apply(RequestOptions().override(300, 300))
+            )
             .apply(requestOptions)
             .dontTransform()
             .dontAnimate()
@@ -101,12 +101,12 @@ fun getImageUrl(album: Album): String {
             album.image
 }
 
-fun getTrackUrl(album: Album?, track: Track): String {
+fun getTrackUrl(album: Album?, fileName: String): String {
     val trackUrl = ApiConfig.getStorage() +
             File.separator +
             album?.audio_folder +
             File.separator +
-            track.filename
+            fileName
 
     val url = URL(trackUrl)
     val uri = URI(url.protocol, url.userInfo, url.host, url.port, url.path, url.query, url.ref)
@@ -114,52 +114,61 @@ fun getTrackUrl(album: Album?, track: Track): String {
     return uri.toASCIIString()
 }
 
-@RequiresApi(Build.VERSION_CODES.KITKAT)
-fun getPreloadedSaveDir(context: Context, track: Track, album: Album): String {
-
-    if (BuildConfig.IS_FREE) {
-        return context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS).toString() +
+fun getPreloadedSaveDir(context: Context, trackName: String, albumName: String): String {
+    val fileDir =
+        if (BuildConfig.IS_FREE)
+            File(
+                getDir(context), Environment.DIRECTORY_DOCUMENTS +
+                        File.separator +
+                        "tracks" +
+                        File.separator +
+                        albumName
+            )
+        else
+            File(
+                getDir(context),
                 File.separator +
-                "tracks" +
-                File.separator +
-                album.audio_folder +
-                File.separator +
-                track.filename.replace("%", "")
-    } else {
-        return context.getExternalFilesDir(null).toString() +
-                File.separator +
-                ".tracks" +
-                File.separator +
-                album.audio_folder +
-                File.separator +
-                track.filename.replace("%", "")
-    }
+                        ".tracks" +
+                        File.separator +
+                        albumName +
+                        File.separator
+            )
+    fileDir.mkdirs()
+    return fileDir.absolutePath + File.separator + trackName.replace("%", "")
 }
 
-@RequiresApi(Build.VERSION_CODES.KITKAT)
-fun getSaveDir(context: Context, track: Track, album: Album): String {
-//    val oldFolder = File( context.getExternalFilesDir(
-//        Environment.DIRECTORY_DOCUMENTS).toString(), "tracks")
-//    val newFolder = File(context.getExternalFilesDir(
-//        Environment.DIRECTORY_DOCUMENTS).toString(), ".tracks")
-//    val success = oldFolder.renameTo(newFolder)
-    if (BuildConfig.IS_FREE) {
-        return context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS).toString() +
+fun getDir(context: Context): File {
+    return context.getExternalFilesDir(null) ?: context.externalCacheDir ?: context.cacheDir
+}
+
+fun getSaveDir(context: Context, trackName: String, albumName: String): String {
+    val fileDir =
+        if (BuildConfig.IS_FREE)
+            File(
+                getDir(context), Environment.DIRECTORY_DOCUMENTS +
+                        File.separator +
+                        "tracks" +
+                        File.separator +
+                        albumName
+            )
+        else
+            File(
+                getDir(context),
                 File.separator +
-                ".tracks" +
-                File.separator +
-                album.audio_folder +
-                File.separator +
-                track.filename.replace("%", "")
-    } else {
-        return context.getExternalFilesDir(null).toString() +
-                File.separator +
-                ".tracks" +
-                File.separator +
-                album.audio_folder +
-                File.separator +
-                track.filename.replace("%", "")
-    }
+                        ".tracks" +
+                        File.separator +
+                        albumName +
+                        File.separator
+            )
+    fileDir.mkdirs()
+    return fileDir.absolutePath + File.separator + trackName.replace("%", "")
+}
+
+fun getTempFile(context: Context, trackName: String, albumName: String): String {
+    return (context.externalCacheDir ?: context.cacheDir).absolutePath +
+            File.separator + albumName + '_' +
+            trackName.replace("%", "")
+
 }
 
 fun getConvertedTime(millis: Long): String {
@@ -188,6 +197,7 @@ fun showAlertInfo(context: Context, e: Exception) {
             context,
             context.getString(R.string.err_unexpected_exception_api)
         )
+
         is IOException -> showAlert(context, context.getString(R.string.err_network_available))
         else -> showAlert(context, context.getString(R.string.err_unexpected_exception))
     }

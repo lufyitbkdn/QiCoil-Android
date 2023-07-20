@@ -44,10 +44,12 @@
 
         <TextView
             android:id="@+id/track_position"
-            android:layout_width="wrap_content"
+            android:layout_width="60dp"
+            android:gravity="center"
+            android:textSize="14dp"
+            android:singleLine="true"
+            android:ellipsize="none"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/indent_8"
-            android:layout_marginEnd="@dimen/indent_8"
             android:textColor="@android:color/white"
             tools:text="00:00">
         </TextView>
@@ -63,10 +65,12 @@
 
         <TextView
             android:id="@+id/track_duration"
-            android:layout_width="wrap_content"
+            android:layout_width="60dp"
+            android:gravity="center"
+            android:textSize="14dp"
+            android:singleLine="true"
+            android:ellipsize="none"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/indent_8"
-            android:layout_marginEnd="@dimen/indent_8"
             android:textColor="@android:color/white"
             tools:text="00:00">
         </TextView>

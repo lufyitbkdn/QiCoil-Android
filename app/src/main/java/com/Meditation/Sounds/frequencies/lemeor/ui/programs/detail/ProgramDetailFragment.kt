@@ -3,22 +3,20 @@ package com.Meditation.Sounds.frequencies.lemeor.ui.programs.detail
 import android.app.Activity.RESULT_OK
 import android.content.Intent
 import android.media.MediaMetadataRetriever
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import androidx.annotation.RequiresApi
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import com.Meditation.Sounds.frequencies.R
-import com.Meditation.Sounds.frequencies.lemeor.*
+import com.Meditation.Sounds.frequencies.lemeor.albumIdBackProgram
+import com.Meditation.Sounds.frequencies.lemeor.currentTrack
+import com.Meditation.Sounds.frequencies.lemeor.currentTrackIndex
 import com.Meditation.Sounds.frequencies.lemeor.data.api.RetrofitBuilder
 import com.Meditation.Sounds.frequencies.lemeor.data.database.DataBase
 import com.Meditation.Sounds.frequencies.lemeor.data.database.dao.ProgramDao
@@ -26,16 +24,31 @@ import com.Meditation.Sounds.frequencies.lemeor.data.model.Program
 import com.Meditation.Sounds.frequencies.lemeor.data.model.Track
 import com.Meditation.Sounds.frequencies.lemeor.data.remote.ApiHelper
 import com.Meditation.Sounds.frequencies.lemeor.data.utils.ViewModelFactory
+import com.Meditation.Sounds.frequencies.lemeor.getConvertedTime
+import com.Meditation.Sounds.frequencies.lemeor.getPreloadedSaveDir
+import com.Meditation.Sounds.frequencies.lemeor.getSaveDir
+import com.Meditation.Sounds.frequencies.lemeor.isMultiPlay
+import com.Meditation.Sounds.frequencies.lemeor.isPlayAlbum
+import com.Meditation.Sounds.frequencies.lemeor.isPlayProgram
+import com.Meditation.Sounds.frequencies.lemeor.isTrackAdd
+import com.Meditation.Sounds.frequencies.lemeor.playAlbumId
+import com.Meditation.Sounds.frequencies.lemeor.playProgramId
+import com.Meditation.Sounds.frequencies.lemeor.positionFor
+import com.Meditation.Sounds.frequencies.lemeor.selectedNaviFragment
 import com.Meditation.Sounds.frequencies.lemeor.tools.downloader.DownloadService
 import com.Meditation.Sounds.frequencies.lemeor.tools.downloader.DownloaderActivity
 import com.Meditation.Sounds.frequencies.lemeor.tools.player.MusicRepository
 import com.Meditation.Sounds.frequencies.lemeor.tools.player.PlayerSelected
+import com.Meditation.Sounds.frequencies.lemeor.trackList
 import com.Meditation.Sounds.frequencies.lemeor.ui.albums.detail.NewAlbumDetailFragment
 import com.Meditation.Sounds.frequencies.lemeor.ui.main.NavigationActivity
 import com.Meditation.Sounds.frequencies.lemeor.ui.programs.NewProgramFragment
 import com.Meditation.Sounds.frequencies.utils.Utils
-import kotlinx.android.synthetic.main.fragment_new_album_detail.*
-import kotlinx.android.synthetic.main.fragment_program_detail.*
+import kotlinx.android.synthetic.main.fragment_program_detail.program_back
+import kotlinx.android.synthetic.main.fragment_program_detail.program_name
+import kotlinx.android.synthetic.main.fragment_program_detail.program_play
+import kotlinx.android.synthetic.main.fragment_program_detail.program_time
+import kotlinx.android.synthetic.main.fragment_program_detail.program_tracks_recycler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
@@ -44,31 +57,26 @@ import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 import java.io.File
-import java.util.*
-import kotlin.collections.ArrayList
+import java.util.Collections
 
 
 class ProgramDetailFragment : Fragment() {
 
     private val programId: Int by lazy {
-        arguments?.getInt(ARG_PROGRAM_ID) ?: throw IllegalArgumentException("Must call through newInstance()")
+        arguments?.getInt(ARG_PROGRAM_ID)
+            ?: throw IllegalArgumentException("Must call through newInstance()")
     }
 
     private var mTracks: ArrayList<Track>? = null
     private var program: Program? = null
     private lateinit var mViewModel: ProgramDetailViewModel
     private var mTrackAdapter: ProgramTrackAdapter? = null
-    private var isDownloaded: Boolean = true
 
-    @RequiresApi(Build.VERSION_CODES.KITKAT)
     @Subscribe(threadMode = ThreadMode.MAIN)
     fun onEvent(event: Any?) {
         if (event == DownloadService.DOWNLOAD_FINISH) {
-            downloadedTracks = null
-
             val tracks: ArrayList<Track> = ArrayList()
 
-            val dao = DataBase.getInstance(requireContext()).albumDao()
             GlobalScope.launch {
                 program?.records?.forEach {
                     mViewModel.getTrackById(it)?.let { track ->
@@ -76,33 +84,9 @@ class ProgramDetailFragment : Fragment() {
                     }
                 }
 
-                var isDownloaded = true
-                tracks.forEach {
-                    val album = dao.getAlbumById(it.albumId)
-
-                    val file = File(getSaveDir(requireContext(), it, album!!))
-                    val preloaded = File(getPreloadedSaveDir(requireContext(), it, album))
-
-                    if (!file.exists() && !preloaded.exists()) {
-                        isDownloaded = false
-                    } else if (file.length() == 0L) {
-                        isDownloaded = false
-                        if (file.exists()) {
-                            file.delete()
-                        }
-                    }
-                }
-
-                this@ProgramDetailFragment.isDownloaded = isDownloaded
-
                 CoroutineScope(Dispatchers.Main).launch {
                     mTracks = tracks
-
-                    if (!isDownloaded) {
-                        program_play.text = getString(R.string.btn_download)
-                    } else {
-                        program_play.text = getString(R.string.btn_play)
-                    }
+                    program_play.text = getString(R.string.btn_play)
                 }
             }
         }
@@ -122,8 +106,10 @@ class ProgramDetailFragment : Fragment() {
         albumIdBackProgram = -1
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?,
-                              savedInstanceState: Bundle?): View? {
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
         return inflater.inflate(R.layout.fragment_program_detail, container, false)
     }
 
@@ -148,10 +134,12 @@ class ProgramDetailFragment : Fragment() {
     }
 
     private fun initUI() {
-        mViewModel = ViewModelProvider(this,
-                ViewModelFactory(
-                        ApiHelper(RetrofitBuilder(requireContext()).apiService),
-                        DataBase.getInstance(requireContext()))
+        mViewModel = ViewModelProvider(
+            this,
+            ViewModelFactory(
+                ApiHelper(RetrofitBuilder(requireContext()).apiService),
+                DataBase.getInstance(requireContext())
+            )
         ).get(ProgramDetailViewModel::class.java)
     }
 
@@ -162,14 +150,16 @@ class ProgramDetailFragment : Fragment() {
             fragment = albumIdBackProgram?.let { NewAlbumDetailFragment.newInstance(it) }
         } else {
             fragment = selectedNaviFragment
-            if (fragment == null) { fragment = NewProgramFragment() }
+            if (fragment == null) {
+                fragment = NewProgramFragment()
+            }
         }
 
         parentFragmentManager
-                .beginTransaction()
-                .setCustomAnimations(R.anim.trans_left_to_right_in, R.anim.trans_left_to_right_out)
-                .replace(R.id.nav_host_fragment, fragment!!, fragment.javaClass.simpleName)
-                .commit()
+            .beginTransaction()
+            .setCustomAnimations(R.anim.trans_left_to_right_in, R.anim.trans_left_to_right_out)
+            .replace(R.id.nav_host_fragment, fragment!!, fragment.javaClass.simpleName)
+            .commit()
     }
 
     private fun setUI(program: Program) {
@@ -190,12 +180,12 @@ class ProgramDetailFragment : Fragment() {
         mTrackAdapter = ProgramTrackAdapter(requireContext(), tracks, program.isMy)
         mTrackAdapter?.setOnClickListener(object : ProgramTrackAdapter.Listener {
             override fun onTrackClick(track: Track, i: Int) {
-                if (isDownloaded) {
-                    isMultiPlay = false
-                    mTrackAdapter?.setSelected(i)
-                    play(tracks)
-                    Handler(Looper.getMainLooper()).postDelayed({ EventBus.getDefault().post(PlayerSelected(i)) }, 200)
-                }
+                isMultiPlay = false
+                mTrackAdapter?.setSelected(i)
+                play(tracks)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    EventBus.getDefault().post(PlayerSelected(i))
+                }, 200)
             }
 
             override fun onTrackOptions(track: Track, i: Int) {
@@ -213,26 +203,13 @@ class ProgramDetailFragment : Fragment() {
                     tracks.add(track)
                 }
             }
-            program_time.text = getString(R.string.total_time, getConvertedTime((tracks.size * 300000).toLong()))
-            var isDownloaded = true
+            program_time.text =
+                getString(R.string.total_time, getConvertedTime((tracks.size * 300000).toLong()))
             tracks.forEach {
                 val album = dao.getAlbumById(it.albumId)
                 it.album = album
-
-                val file = File(getSaveDir(requireContext(), it, album!!))
-                val preloaded = File(getPreloadedSaveDir(requireContext(), it, album))
-
-                if ((!file.exists() && !preloaded.exists())) {
-                    isDownloaded = false
-                } else if (file.length() == 0L) {
-                    isDownloaded = false
-                    if (file.exists()) {
-                        file.delete()
-                    }
-                }
             }
 
-            this@ProgramDetailFragment.isDownloaded = isDownloaded
 
             CoroutineScope(Dispatchers.Main).launch {
                 mTracks = tracks
@@ -241,16 +218,12 @@ class ProgramDetailFragment : Fragment() {
                 if (currentTrack.value != null) {
                     val track = currentTrack.value
                     val indexSelected = tracks.indexOfFirst { it.id == track?.trackId }
-                    if (indexSelected >= 0){
+                    if (indexSelected >= 0) {
                         mTrackAdapter?.setSelected(indexSelected)
                     }
                 }
 
-                if (!isDownloaded) {
-                    program_play.text = getString(R.string.btn_download)
-                } else {
-                    program_play.text = getString(R.string.btn_play)
-                }
+                program_play.text = getString(R.string.btn_play)
             }
         }
 
@@ -263,50 +236,57 @@ class ProgramDetailFragment : Fragment() {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.KITKAT)
     private fun playOrDownload(tracks: ArrayList<Track>) {
-        if (!isDownloaded) {
-            if (!Utils.isConnectedToNetwork(requireContext())) {
-                Toast.makeText(requireContext(), getString(R.string.err_network_available), Toast.LENGTH_SHORT).show()
-                return
-            }
+        if (Utils.isConnectedToNetwork(requireContext())) {
 
             val list = ArrayList<Track>()
 
             val dao = DataBase.getInstance(requireContext()).albumDao()
             GlobalScope.launch {
-                tracks.forEach { t->
+                tracks.forEach { t ->
                     val album = dao.getAlbumById(t.albumId)
                     t.album = album
 
-                    val file = File(getSaveDir(requireContext(), t, album!!))
-                    val preloaded = File(getPreloadedSaveDir(requireContext(), t, album))
+                    val file =
+                        File(getSaveDir(requireContext(), t.filename, album?.audio_folder ?: ""))
+                    val preloaded = File(
+                        getPreloadedSaveDir(
+                            requireContext(),
+                            t.filename,
+                            album?.audio_folder ?: ""
+                        )
+                    )
 
                     if (!file.exists() && !preloaded.exists()) {
                         var isExist = false
-                        list.forEach { l->
-                            if (l.id == t.id) { isExist = true }
+                        list.forEach { l ->
+                            if (l.id == t.id) {
+                                isExist = true
+                            }
                         }
-                        if (!isExist) { list.add(t) }
+                        if (!isExist) {
+                            list.add(t)
+                        }
                     }
                 }
 
-                downloadedTracks = list
-
                 CoroutineScope(Dispatchers.Main).launch {
-                    startActivity(DownloaderActivity.newIntent(requireContext(), list))
+                    activity?.let {
+                        DownloaderActivity.startDownload(it, list)
+                    }
                 }
             }
-        } else {
-            play(tracks)
-            EventBus.getDefault().post(PlayerSelected(0))
         }
+        play(tracks)
+        EventBus.getDefault().post(PlayerSelected(0))
     }
 
     fun play(tracks: ArrayList<Track>) {
         val activity = activity as NavigationActivity
 
-        if (isPlayAlbum || playProgramId != programId) { activity.hidePlayerUI() }
+        if (isPlayAlbum || playProgramId != programId) {
+            activity.hidePlayerUI()
+        }
 
         isPlayAlbum = false
         playAlbumId = -1
@@ -318,21 +298,25 @@ class ProgramDetailFragment : Fragment() {
 
         GlobalScope.launch {
             tracks.forEach { t ->
-                val file = File(getSaveDir(requireContext(), t, t.album!!))
-                val preloaded = File(getPreloadedSaveDir(requireContext(), t, t.album!!))
-
-                var uri: Uri? = null
-
-                if (file.exists()) { uri = Uri.fromFile(file) }
-
-                if (preloaded.exists()) { uri = Uri.fromFile(preloaded) }
-
+                val file =
+                    File(getSaveDir(requireContext(), t.filename, t.album?.audio_folder ?: ""))
                 val track = db.trackDao().getTrackById(t.id)
-                if (track?.duration == 0.toLong()) { track.duration = getDuration(file) }
-                Log.i("fileduration","d-->"+getDuration(file))
-                val multiplay = track?.duration!! / 300000
-
-                data.add(MusicRepository.Track(track.id, track.name, t.album?.name!!, t.album!!, R.drawable.launcher, uri!!, track.duration, 0, multiplay.toInt()))
+                if (track?.duration == 0.toLong()) {
+                    track.duration = getDuration(file)
+                }
+                data.add(
+                    MusicRepository.Track(
+                        t.id,
+                        t.name,
+                        t.album?.name!!,
+                        t.albumId,
+                        t.album!!,
+                        R.drawable.launcher,
+                        t.duration,
+                        0,
+                        t.filename
+                    )
+                )
             }
 
             trackList = data
@@ -346,7 +330,8 @@ class ProgramDetailFragment : Fragment() {
     private fun getDuration(file: File): Long {
         val mediaMetadataRetriever = MediaMetadataRetriever()
         mediaMetadataRetriever.setDataSource(file.absolutePath)
-        val durationStr = mediaMetadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+        val durationStr =
+            mediaMetadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
         return durationStr?.toLong() ?: 0L
     }
 
@@ -372,23 +357,40 @@ class ProgramDetailFragment : Fragment() {
                     action.equals("track_move_up") -> {
                         if (positionFor == 0) {
                             CoroutineScope(Dispatchers.Main).launch {
-                                Toast.makeText(requireContext(), "Track in first position", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    requireContext(),
+                                    "Track in first position",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                             return@launch
                         }
                         moveTrack(list, true, programDao)
                     }
+
                     action.equals("track_move_down") -> {
                         if (positionFor == list.size - 1) {
                             CoroutineScope(Dispatchers.Main).launch {
-                                Toast.makeText(requireContext(), "Track in last position", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    requireContext(),
+                                    "Track in last position",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                             return@launch
                         }
                         moveTrack(list, false, programDao)
                     }
+
                     action.equals("track_remove") -> {
-                        positionFor?.let { mTracks?.get(it)?.id?.let { it1 -> trackDao.isTrackFavorite(false, it1) } }
+                        positionFor?.let {
+                            mTracks?.get(it)?.id?.let { it1 ->
+                                trackDao.isTrackFavorite(
+                                    false,
+                                    it1
+                                )
+                            }
+                        }
 
                         list.removeAt(positionFor!!)
                         program?.records = list as ArrayList<Int>

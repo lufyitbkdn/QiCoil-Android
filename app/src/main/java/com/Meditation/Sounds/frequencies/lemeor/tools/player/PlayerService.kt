@@ -14,16 +14,21 @@ import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.provider.SyncStateContract.Constants
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.widget.Toast
 import androidx.core.app.NotificationCompat.*
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.media.app.NotificationCompat
 import androidx.media.session.MediaButtonReceiver
 import com.Meditation.Sounds.frequencies.R
+import com.Meditation.Sounds.frequencies.feature.album.AlbumRepository
 import com.Meditation.Sounds.frequencies.lemeor.*
+import com.Meditation.Sounds.frequencies.lemeor.data.database.DataBase
+import com.Meditation.Sounds.frequencies.utils.Utils
 import com.google.android.exoplayer2.*
 import com.google.android.exoplayer2.Player.REPEAT_MODE_ALL
 import com.google.android.exoplayer2.Player.REPEAT_MODE_OFF
@@ -35,10 +40,12 @@ import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory
 import com.google.android.exoplayer2.util.Util
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
+import java.io.File
 import java.util.*
 import kotlin.math.ceil
 
@@ -47,10 +54,9 @@ class PlayerService : Service() {
 
     companion object {
         lateinit var musicRepository: MusicRepository
+        private val NOTIFICATION_ID = 404
+        private val NOTIFICATION_DEFAULT_CHANNEL_ID = "default_channel"
     }
-
-    private val NOTIFICATION_ID = 404
-    private val NOTIFICATION_DEFAULT_CHANNEL_ID = "default_channel"
 
     private val metadataBuilder = MediaMetadataCompat.Builder()
 
@@ -63,17 +69,43 @@ class PlayerService : Service() {
                 or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
     )
 
-    var mediaSession: MediaSessionCompat? = null
+    private val mediaSession: MediaSessionCompat by lazy {
+        val mediaButtonIntent = Intent(
+            Intent.ACTION_MEDIA_BUTTON,
+            null,
+            applicationContext,
+            MediaButtonReceiver::class.java
+        )
 
-    private var audioManager: AudioManager? = null
+        val pendingIntent = PendingIntent.getBroadcast(
+            applicationContext,
+            0,
+            mediaButtonIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        MediaSessionCompat(this, "PlayerService", null, pendingIntent).apply {
+            setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
+            setCallback(mediaSessionCallback)
+        }
+    }
+
+    private val audioManager: AudioManager by lazy {
+        getSystemService(AUDIO_SERVICE) as AudioManager
+    }
     private var audioFocusRequest: AudioFocusRequest? = null
     private var audioFocusRequested = false
 
-    private var exoPlayer: SimpleExoPlayer? = null
+    val exoPlayer: SimpleExoPlayer by lazy {
+        SimpleExoPlayer.Builder(
+            this,
+            DefaultRenderersFactory(this),
+        ).setLoadControl(DefaultLoadControl())
+            .setTrackSelector(DefaultTrackSelector(this))
+            .build()
+    }
     private val progressTimer = Timer()
     private var isShuffle: Boolean = false
 
-    private var mDuration: Long = 0
     private var playPosition: Long = 0
     private var isRepeatAll = false
 
@@ -95,7 +127,7 @@ class PlayerService : Service() {
                 isRepeatAll = false
             }
 
-            exoPlayer?.repeatMode = type
+            exoPlayer.repeatMode = type
         }
 
         if (event?.javaClass == PlayerSeek::class.java) {
@@ -113,11 +145,11 @@ class PlayerService : Service() {
 //            }
 
             //todo remake this ugly fading
-            exoPlayer?.volume = 0F
+            exoPlayer.volume = 0F
             Thread.sleep(100)
-            exoPlayer?.seekTo(seekPosition!!.toLong())
+            exoPlayer.seekTo(seekPosition!!.toLong())
             Thread.sleep(100)
-            exoPlayer?.volume = 1F
+            exoPlayer.volume = 1F
         }
 
         if (event?.javaClass == PlayerSelected::class.java) {
@@ -172,35 +204,8 @@ class PlayerService : Service() {
                 .build()
         }
 
-        audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-
-        val mediaButtonIntent = Intent(
-            Intent.ACTION_MEDIA_BUTTON,
-            null,
-            applicationContext,
-            MediaButtonReceiver::class.java
-        )
-
-        val pendingIntent = PendingIntent.getBroadcast(
-            applicationContext,
-            0,
-            mediaButtonIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        mediaSession = MediaSessionCompat(this, "PlayerService", null, pendingIntent)
-        mediaSession?.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
-        mediaSession?.setCallback(mediaSessionCallback)
-
-
-        exoPlayer = ExoPlayerFactory.newSimpleInstance(
-            this,
-            DefaultRenderersFactory(this),
-            DefaultTrackSelector(),
-            DefaultLoadControl()
-        )
-        exoPlayer?.addListener(exoPlayerListener)
-        exoPlayer?.repeatMode = Player.REPEAT_MODE_ONE
+        exoPlayer.addListener(exoPlayerListener)
+        exoPlayer.repeatMode = Player.REPEAT_MODE_ONE
 
         //send state
         sendData()
@@ -211,16 +216,16 @@ class PlayerService : Service() {
             override fun run() {
                 CoroutineScope(Dispatchers.Main).launch {
 
-                    var position = exoPlayer?.currentPosition!!
+                    var position = exoPlayer.currentPosition
                     if (position < 0) position = 0
 
                     currentPosition.postValue(position)
 
-                    var dur = mDuration
-
-                    if (dur < 0) dur = 0
-                    max.postValue(dur)
-                    duration.postValue(dur - position)
+                    val dur = exoPlayer.duration
+                    if (max.value != dur) {
+                        max.postValue(dur)
+                    }
+                    duration.postValue(((max.value ?: dur) - position).coerceAtLeast(0))
                 }
             }
         }, 0, 300)
@@ -236,10 +241,8 @@ class PlayerService : Service() {
         EventBus.getDefault().unregister(this)
         progressTimer.cancel()
         progressTimer.purge()
-        mediaSession?.release()
-        exoPlayer?.release()
-
-
+        mediaSession.release()
+        exoPlayer.release()
     }
 
     private val mediaSessionCallback: MediaSessionCompat.Callback =
@@ -248,8 +251,7 @@ class PlayerService : Service() {
             var currentState = PlaybackStateCompat.STATE_STOPPED
 
             override fun onPlay() {
-                if (!exoPlayer?.playWhenReady!!) {
-
+                if (!exoPlayer.playWhenReady) {
                     try {
                         ContextCompat.startForegroundService(
                             applicationContext,
@@ -260,21 +262,20 @@ class PlayerService : Service() {
                         //applicationContext.stopService(Intent(applicationContext, PlayerService::class.java))
                     }
                     val track = musicRepository.getCurrent()
-                    mDuration = track.duration
 //                    mMultiPlay = track.multiplay
 
                     updateMetadataFromTrack(track)
 
-                    prepareToPlay(track.uri)
+                    prepareToPlay(track)
 
                     if (!audioFocusRequested) {
                         audioFocusRequested = true
 
                         val audioFocusResult: Int =
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                audioManager!!.requestAudioFocus(audioFocusRequest!!)
+                                audioManager.requestAudioFocus(audioFocusRequest!!)
                             } else {
-                                audioManager!!.requestAudioFocus(
+                                audioManager.requestAudioFocus(
                                     audioFocusChangeListener,
                                     STREAM_MUSIC,
                                     AUDIOFOCUS_GAIN
@@ -284,14 +285,14 @@ class PlayerService : Service() {
                         if (audioFocusResult != AUDIOFOCUS_REQUEST_GRANTED) return
                     }
 
-                    mediaSession!!.isActive = true
+                    mediaSession.isActive = true
                     registerReceiver(
                         becomingNoisyReceiver,
                         IntentFilter(ACTION_AUDIO_BECOMING_NOISY)
                     )
-                    exoPlayer!!.playWhenReady = true
+                    exoPlayer.playWhenReady = true
                 }
-                mediaSession!!.setPlaybackState(
+                mediaSession.setPlaybackState(
                     stateBuilder.setState(
                         PlaybackStateCompat.STATE_PLAYING,
                         PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
@@ -303,13 +304,16 @@ class PlayerService : Service() {
             }
 
             override fun onPause() {
-                if (exoPlayer!!.playWhenReady) {
-                    playPosition = exoPlayer!!.currentPosition
+                if (exoPlayer.playWhenReady) {
+                    playPosition = exoPlayer.currentPosition
 
-                    exoPlayer!!.playWhenReady = false
-                    unregisterReceiver(becomingNoisyReceiver)
+                    exoPlayer.playWhenReady = false
+                    if(mediaSession.isActive) {
+                        unregisterReceiver(becomingNoisyReceiver)
+                    }
                 }
-                mediaSession!!.setPlaybackState(
+
+                mediaSession.setPlaybackState(
                     stateBuilder.setState(
                         PlaybackStateCompat.STATE_PAUSED,
                         PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
@@ -321,20 +325,20 @@ class PlayerService : Service() {
             }
 
             override fun onStop() {
-                if (exoPlayer!!.playWhenReady) {
-                    exoPlayer!!.playWhenReady = false
+                if (exoPlayer.playWhenReady) {
+                    exoPlayer.playWhenReady = false
                     unregisterReceiver(becomingNoisyReceiver)
                 }
                 if (audioFocusRequested) {
                     audioFocusRequested = false
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        audioManager!!.abandonAudioFocusRequest(audioFocusRequest!!)
+                        audioManager.abandonAudioFocusRequest(audioFocusRequest!!)
                     } else {
-                        audioManager!!.abandonAudioFocus(audioFocusChangeListener)
+                        audioManager.abandonAudioFocus(audioFocusChangeListener)
                     }
                 }
-                mediaSession!!.isActive = false
-                mediaSession!!.setPlaybackState(
+                mediaSession.isActive = false
+                mediaSession.setPlaybackState(
                     stateBuilder.setState(
                         PlaybackStateCompat.STATE_STOPPED,
                         PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
@@ -360,17 +364,13 @@ class PlayerService : Service() {
                     }
                 }
 
-                mDuration = track.duration
-//                mMultiPlay = track.multiplay
-
                 updateMetadataFromTrack(track)
                 refreshNotificationAndForegroundStatus(currentState)
-                prepareToPlay(track.uri)
+                prepareToPlay(track)
             }
 
             override fun onSkipToPrevious() {
                 playPosition = 0
-//                mPart = 1
 
                 val track: MusicRepository.Track = if (isShuffle) {
                     musicRepository.getRandom()
@@ -378,25 +378,73 @@ class PlayerService : Service() {
                     musicRepository.getPrevious()
                 }
 
-                mDuration = track.duration
-//                mMultiPlay = track.multiplay
-
                 updateMetadataFromTrack(track)
                 refreshNotificationAndForegroundStatus(currentState)
-                prepareToPlay(track.uri)
+                prepareToPlay(track)
             }
 
-            fun prepareToPlay(uri: Uri) {
-                currentUri = uri
+            fun prepareToPlay(track: MusicRepository.Track) {
+                val file = File(
+                    getSaveDir(
+                        applicationContext, track.filename,
+                        track.album.audio_folder
+                    )
+                )
+                val preloaded = File(
+                    getPreloadedSaveDir(
+                        applicationContext,
+                        track.filename,
+                        track.album.audio_folder
+                    )
+                )
 
-                //todo remake this ugly fading
-                exoPlayer?.volume = 0F
-                Thread.sleep(100)
-                buildMediaSource(uri).let { exoPlayer?.setMediaSource(it) }
-                exoPlayer?.prepare()
-                exoPlayer!!.seekTo(playPosition)
-                Thread.sleep(100)
-                exoPlayer?.volume = 1F
+                var uri: Uri? = null
+                if (file.exists()) {
+                    uri = Uri.fromFile(file)
+                }
+
+                if (preloaded.exists()) {
+                    uri = Uri.fromFile(preloaded)
+                }
+                if (uri == null) {
+                    uri = Uri.parse(
+                        getTrackUrl(track.album, track.filename)
+                    )
+                    if (!Utils.isConnectedToNetwork(applicationContext)) {
+                        Toast.makeText(
+                            applicationContext,
+                            getString(R.string.err_network_available),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+                uri?.let {
+                    currentUri = uri
+
+                    //todo remake this ugly fading
+                    exoPlayer.volume = 0F
+                    Thread.sleep(100)
+                    buildMediaSource(uri).let { exoPlayer.setMediaSource(it) }
+                    exoPlayer.prepare()
+                    exoPlayer.seekTo(playPosition)
+                    Thread.sleep(100)
+                    exoPlayer.volume = 1F
+                    exoPlayer.play()
+                    registerReceiver(
+                        becomingNoisyReceiver,
+                        IntentFilter(ACTION_AUDIO_BECOMING_NOISY)
+                    )
+                    mediaSession.isActive = true
+                    mediaSession.setPlaybackState(
+                        stateBuilder.setState(
+                            PlaybackStateCompat.STATE_PLAYING,
+                            PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
+                            1f
+                        ).build()
+                    )
+                    currentState = PlaybackStateCompat.STATE_PLAYING
+                    refreshNotificationAndForegroundStatus(currentState)
+                }
             }
 
             private fun buildMediaSource(uri: Uri): MediaSource {
@@ -407,30 +455,37 @@ class PlayerService : Service() {
                 return ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(uri)
             }
 
-            fun updateMetadataFromTrack(track: MusicRepository.Track?) {
+            fun updateMetadataFromTrack(track: MusicRepository.Track) {
                 metadataBuilder.putBitmap(
                     MediaMetadataCompat.METADATA_KEY_ART,
-                    BitmapFactory.decodeResource(resources, track!!.resId)
+                    BitmapFactory.decodeResource(resources, track.resId)
                 )
                 metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
                 metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM, track.artist)
                 metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.artist)
-                metadataBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, track.duration)
-                mediaSession!!.setMetadata(metadataBuilder.build())
+                metadataBuilder.putLong(
+                    MediaMetadataCompat.METADATA_KEY_DURATION,
+                    track.duration
+                )
+                mediaSession.setMetadata(metadataBuilder.build())
+                max.postValue(track.duration)
+                duration.postValue(track.duration)
             }
         }
 
     private val audioFocusChangeListener = OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
             AUDIOFOCUS_GAIN -> {
-                if (!exoPlayer?.playWhenReady!! && !isUserPaused) {
+                if (!exoPlayer.playWhenReady && !isUserPaused) {
                     mediaSessionCallback.onPlay()
                 }
-                exoPlayer?.volume = 1F
+                exoPlayer.volume = 1F
             }
+
             AUDIOFOCUS_LOSS,
             AUDIOFOCUS_LOSS_TRANSIENT -> mediaSessionCallback.onPause()
-            AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> exoPlayer?.volume = 0.5F
+
+            AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> exoPlayer.volume = 0.5F
             else -> mediaSessionCallback.onPause()
         }
     }
@@ -445,19 +500,10 @@ class PlayerService : Service() {
     }
 
     private val exoPlayerListener: Player.EventListener = object : Player.EventListener {
-        override fun onLoadingChanged(isLoading: Boolean) {}
-        override fun onPlayerStateChanged(playWhenReady: Boolean, playbackState: Int) {
-            if (playWhenReady && playbackState == ExoPlayer.STATE_ENDED) {
-//                val current = musicRepository.getCurrent()
-//                val multiplay = current.multiplay
-//                if (multiplay > mPart) {
-//                    mPart++
-//                    isMultiPlay = true
-//                } else {
-//                    mPart = 1
-//                    isMultiPlay = false
-//                }
 
+        override fun onPlaybackStateChanged(state: Int) {
+            super.onPlaybackStateChanged(state)
+            if (state == ExoPlayer.STATE_ENDED) {
                 if (musicRepository.isLastTrack() && !isRepeatAll) {
                     mediaSessionCallback.onStop()
                 } else {
@@ -465,10 +511,16 @@ class PlayerService : Service() {
                 }
             }
         }
+
+        override fun onPlayerError(error: ExoPlaybackException) {
+            super.onPlayerError(error)
+            mediaSessionCallback.onStop()
+        }
+
     }
 
-    override fun onBind(intent: Intent?): IBinder? {
-        return mediaSession?.let { PlayerServiceBinder(it) }
+    override fun onBind(intent: Intent?): IBinder {
+        return PlayerServiceBinder(mediaSession)
     }
 
     class PlayerServiceBinder(private val mediaSession: MediaSessionCompat) : Binder() {
@@ -482,11 +534,13 @@ class PlayerService : Service() {
                 PlaybackStateCompat.STATE_PLAYING -> {
                     startForeground(NOTIFICATION_ID, getNotification(playbackState))
                 }
+
                 PlaybackStateCompat.STATE_PAUSED -> {
                     NotificationManagerCompat.from(this@PlayerService)
                         .notify(NOTIFICATION_ID, getNotification(playbackState))
                     stopForeground(false)
                 }
+
                 else -> {
                     stopForeground(true)
                 }
@@ -497,7 +551,7 @@ class PlayerService : Service() {
     }
 
     private fun getNotification(playbackState: Int): Notification {
-        val builder: Builder = styleThis(this, mediaSession!!)
+        val builder: Builder = styleThis(this, mediaSession)
         builder.addAction(
             Action(
                 android.R.drawable.ic_media_previous,
@@ -550,7 +604,7 @@ class PlayerService : Service() {
                         PlaybackStateCompat.ACTION_STOP
                     )
                 )
-                .setMediaSession(mediaSession!!.sessionToken)
+                .setMediaSession(mediaSession.sessionToken)
         ) // setMediaSession for Android Wear
         builder.setSmallIcon(R.mipmap.ic_launcher)
         builder.color = ContextCompat.getColor(
