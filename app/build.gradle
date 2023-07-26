@@ -150,6 +150,7 @@ dependencies {
     implementation 'org.greenrobot:eventbus:3.2.0'
     // Exo Player
     implementation 'com.google.android.exoplayer:exoplayer-core:2.13.3'
+    implementation 'com.google.android.exoplayer:extension-mediasession:2.13.3'
     implementation 'com.google.android.exoplayer:extension-okhttp:2.13.3'
 
     implementation 'com.google.android.exoplayer:exoplayer-dash:2.13.3'

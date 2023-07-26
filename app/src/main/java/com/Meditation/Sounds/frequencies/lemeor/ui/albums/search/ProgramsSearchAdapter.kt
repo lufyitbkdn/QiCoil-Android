@@ -10,8 +10,7 @@ import com.Meditation.Sounds.frequencies.lemeor.data.model.Program
 import kotlinx.android.synthetic.main.item_search.view.*
 
 class ProgramsSearchAdapter(
-        private val mContext: Context,
-        private var mData: List<Program>,
+    private var mData: List<Program> = arrayListOf(),
 ) : RecyclerView.Adapter<ProgramsSearchAdapter.ViewHolder>() {
 
     interface Listener {

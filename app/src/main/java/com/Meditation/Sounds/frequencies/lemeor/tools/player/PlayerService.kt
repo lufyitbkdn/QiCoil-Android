@@ -10,11 +10,11 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.AudioManager.*
+import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
-import android.provider.SyncStateContract.Constants
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -25,9 +25,7 @@ import androidx.core.content.ContextCompat
 import androidx.media.app.NotificationCompat
 import androidx.media.session.MediaButtonReceiver
 import com.Meditation.Sounds.frequencies.R
-import com.Meditation.Sounds.frequencies.feature.album.AlbumRepository
 import com.Meditation.Sounds.frequencies.lemeor.*
-import com.Meditation.Sounds.frequencies.lemeor.data.database.DataBase
 import com.Meditation.Sounds.frequencies.utils.Utils
 import com.google.android.exoplayer2.*
 import com.google.android.exoplayer2.Player.REPEAT_MODE_ALL
@@ -40,22 +38,20 @@ import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory
 import com.google.android.exoplayer2.util.Util
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 import java.io.File
 import java.util.*
-import kotlin.math.ceil
 
 
 class PlayerService : Service() {
 
     companion object {
         lateinit var musicRepository: MusicRepository
-        private val NOTIFICATION_ID = 404
-        private val NOTIFICATION_DEFAULT_CHANNEL_ID = "default_channel"
+        const val NOTIFICATION_ID = 404
+        const val NOTIFICATION_DEFAULT_CHANNEL_ID = "default_channel"
     }
 
     private val metadataBuilder = MediaMetadataCompat.Builder()
@@ -68,6 +64,7 @@ class PlayerService : Service() {
                 or PlaybackStateCompat.ACTION_SKIP_TO_NEXT
                 or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
     )
+    private var isRegisteredBusyReceiver = false
 
     private val mediaSession: MediaSessionCompat by lazy {
         val mediaButtonIntent = Intent(
@@ -94,6 +91,8 @@ class PlayerService : Service() {
     }
     private var audioFocusRequest: AudioFocusRequest? = null
     private var audioFocusRequested = false
+    private var currentUri: Uri? = null
+    var currentState = PlaybackStateCompat.STATE_STOPPED
 
     val exoPlayer: SimpleExoPlayer by lazy {
         SimpleExoPlayer.Builder(
@@ -147,8 +146,15 @@ class PlayerService : Service() {
             //todo remake this ugly fading
             exoPlayer.volume = 0F
             Thread.sleep(100)
-            exoPlayer.seekTo(seekPosition!!.toLong())
+            exoPlayer.seekTo(seekPosition.toLong())
             Thread.sleep(100)
+            mediaSession.setPlaybackState(
+                stateBuilder.setState(
+                    currentState,
+                    exoPlayer.currentPosition,
+                    1f
+                ).build()
+            )
             exoPlayer.volume = 1F
         }
 
@@ -187,7 +193,7 @@ class PlayerService : Service() {
                         .setNotificationSilent()
                         .setContentText("").build()
 
-                startForeground((1..1000).random(), notification)
+                startForeground(NOTIFICATION_ID, getNotification(currentState))
             } catch (_: Exception) {
 
             }
@@ -222,9 +228,6 @@ class PlayerService : Service() {
                     currentPosition.postValue(position)
 
                     val dur = exoPlayer.duration
-                    if (max.value != dur) {
-                        max.postValue(dur)
-                    }
                     duration.postValue(((max.value ?: dur) - position).coerceAtLeast(0))
                 }
             }
@@ -247,8 +250,6 @@ class PlayerService : Service() {
 
     private val mediaSessionCallback: MediaSessionCompat.Callback =
         object : MediaSessionCompat.Callback() {
-            private var currentUri: Uri? = null
-            var currentState = PlaybackStateCompat.STATE_STOPPED
 
             override fun onPlay() {
                 if (!exoPlayer.playWhenReady) {
@@ -286,16 +287,19 @@ class PlayerService : Service() {
                     }
 
                     mediaSession.isActive = true
-                    registerReceiver(
-                        becomingNoisyReceiver,
-                        IntentFilter(ACTION_AUDIO_BECOMING_NOISY)
-                    )
+                    if(!isRegisteredBusyReceiver) {
+                        isRegisteredBusyReceiver = true
+                        registerReceiver(
+                            becomingNoisyReceiver,
+                            IntentFilter(ACTION_AUDIO_BECOMING_NOISY)
+                        )
+                    }
                     exoPlayer.playWhenReady = true
                 }
                 mediaSession.setPlaybackState(
                     stateBuilder.setState(
                         PlaybackStateCompat.STATE_PLAYING,
-                        PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
+                        playPosition,
                         1f
                     ).build()
                 )
@@ -308,7 +312,8 @@ class PlayerService : Service() {
                     playPosition = exoPlayer.currentPosition
 
                     exoPlayer.playWhenReady = false
-                    if(mediaSession.isActive) {
+                    if(isRegisteredBusyReceiver) {
+                        isRegisteredBusyReceiver = false
                         unregisterReceiver(becomingNoisyReceiver)
                     }
                 }
@@ -327,7 +332,10 @@ class PlayerService : Service() {
             override fun onStop() {
                 if (exoPlayer.playWhenReady) {
                     exoPlayer.playWhenReady = false
-                    unregisterReceiver(becomingNoisyReceiver)
+                    if(isRegisteredBusyReceiver) {
+                        isRegisteredBusyReceiver = false
+                        unregisterReceiver(becomingNoisyReceiver)
+                    }
                 }
                 if (audioFocusRequested) {
                     audioFocusRequested = false
@@ -341,7 +349,7 @@ class PlayerService : Service() {
                 mediaSession.setPlaybackState(
                     stateBuilder.setState(
                         PlaybackStateCompat.STATE_STOPPED,
-                        PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
+                        exoPlayer.currentPosition,
                         1f
                     ).build()
                 )
@@ -419,21 +427,32 @@ class PlayerService : Service() {
                     }
                 }
                 uri?.let {
-                    currentUri = uri
+                    if (currentUri?.toString() != uri.toString()
+                        || (exoPlayer.playbackState != PlaybackState.STATE_PAUSED
+                                && exoPlayer.playbackState != PlaybackState.STATE_PLAYING)
+                    ) {
+                        currentUri = uri
 
-                    //todo remake this ugly fading
-                    exoPlayer.volume = 0F
-                    Thread.sleep(100)
-                    buildMediaSource(uri).let { exoPlayer.setMediaSource(it) }
-                    exoPlayer.prepare()
-                    exoPlayer.seekTo(playPosition)
-                    Thread.sleep(100)
-                    exoPlayer.volume = 1F
+                        //todo remake this ugly fading
+                        exoPlayer.volume = 0F
+                        Thread.sleep(100)
+                        buildMediaSource(uri).let { exoPlayer.setMediaSource(it) }
+                        exoPlayer.prepare()
+                        exoPlayer.seekTo(playPosition)
+                        Thread.sleep(100)
+                        exoPlayer.volume = 1F
+                        duration.postValue(0)
+                    } else {
+                        exoPlayer.seekTo(playPosition)
+                    }
                     exoPlayer.play()
-                    registerReceiver(
-                        becomingNoisyReceiver,
-                        IntentFilter(ACTION_AUDIO_BECOMING_NOISY)
-                    )
+                    if(!isRegisteredBusyReceiver) {
+                        isRegisteredBusyReceiver = true
+                        registerReceiver(
+                            becomingNoisyReceiver,
+                            IntentFilter(ACTION_AUDIO_BECOMING_NOISY)
+                        )
+                    }
                     mediaSession.isActive = true
                     mediaSession.setPlaybackState(
                         stateBuilder.setState(
@@ -465,7 +484,7 @@ class PlayerService : Service() {
                 metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.artist)
                 metadataBuilder.putLong(
                     MediaMetadataCompat.METADATA_KEY_DURATION,
-                    track.duration
+                    track.duration.takeIf { it>0 }?: exoPlayer.duration
                 )
                 mediaSession.setMetadata(metadataBuilder.build())
                 max.postValue(track.duration)
@@ -509,6 +528,14 @@ class PlayerService : Service() {
                 } else {
                     mediaSessionCallback.onSkipToNext()
                 }
+            }else if (state == ExoPlayer.STATE_READY) {
+                max.postValue(exoPlayer.duration)
+                metadataBuilder.putLong(
+                    MediaMetadataCompat.METADATA_KEY_DURATION,
+                    exoPlayer.duration
+                )
+                mediaSession.setMetadata(metadataBuilder.build())
+                startForeground(NOTIFICATION_ID, getNotification(currentState))
             }
         }
 

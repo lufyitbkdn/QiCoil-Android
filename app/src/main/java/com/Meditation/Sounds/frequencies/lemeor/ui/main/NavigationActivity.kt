@@ -6,11 +6,9 @@ import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
@@ -21,7 +19,6 @@ import android.text.TextWatcher
 import android.util.Log
 import android.view.MenuItem
 import android.view.View
-import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -54,8 +51,8 @@ import com.Meditation.Sounds.frequencies.lemeor.tools.PreferenceHelper.isLogged
 import com.Meditation.Sounds.frequencies.lemeor.tools.PreferenceHelper.isShowDisclaimer
 import com.Meditation.Sounds.frequencies.lemeor.tools.PreferenceHelper.preference
 import com.Meditation.Sounds.frequencies.lemeor.tools.downloader.*
+import com.Meditation.Sounds.frequencies.lemeor.tools.player.PlayerService
 import com.Meditation.Sounds.frequencies.lemeor.tools.player.PlayerUIFragment
-import com.Meditation.Sounds.frequencies.lemeor.ui.AdvActivity
 import com.Meditation.Sounds.frequencies.lemeor.ui.albums.detail.NewAlbumDetailFragment
 import com.Meditation.Sounds.frequencies.lemeor.ui.albums.search.AlbumsSearchAdapter
 import com.Meditation.Sounds.frequencies.lemeor.ui.albums.search.ProgramsSearchAdapter
@@ -82,13 +79,11 @@ import com.facebook.FacebookException
 import com.facebook.login.LoginManager
 import com.facebook.login.LoginResult
 import com.google.android.material.bottomnavigation.BottomNavigationView.OnNavigationItemSelectedListener
-import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.gson.Gson
 import com.suddenh4x.ratingdialog.AppRating
 import com.suddenh4x.ratingdialog.buttons.ConfirmButtonClickListener
 import com.suddenh4x.ratingdialog.preferences.RatingThreshold
 import com.tonyodev.fetch2core.isNetworkAvailable
-import kotlinx.android.synthetic.main.activity_downloader.downloader_tv_quantity
 import kotlinx.android.synthetic.main.activity_navigation.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -106,9 +101,6 @@ const val REQUEST_CODE_PERMISSION = 1111
 class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener,
     CategoriesPagerListener, OnTiersFragmentListener, ApiListener<Any> {
 
-    private var bound = false
-    private var downloadService: DownloadService? = null
-
     private lateinit var mViewModel: HomeViewModel
     private var playerUI: PlayerUIFragment? = null
 
@@ -116,51 +108,31 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
     private var refId: Long = 0
 
     //search
-    private var mAlbumsSearchAdapter: AlbumsSearchAdapter? = null
-    private var mTracksSearchAdapter: TracksSearchAdapter? = null
-    private var mProgramsSearchAdapter: ProgramsSearchAdapter? = null
+    private val mAlbumsSearchAdapter = AlbumsSearchAdapter()
+    private val mTracksSearchAdapter = TracksSearchAdapter()
+    private val mProgramsSearchAdapter = ProgramsSearchAdapter()
 
     private var albumsSearch = MutableLiveData<List<Album>>()
     private var tracksSearch = MutableLiveData<List<Track>>()
     private var programsSearch = MutableLiveData<List<Program>>()
 
     private var mCallbackManager: CallbackManager? = null
-    private lateinit var firebaseAnalytics: FirebaseAnalytics
 
-    private val connection = object : ServiceConnection {
-        override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            // We've bound to LocalService, cast the IBinder and get LocalService instance.
-            val binder = service as DownloadService.DownloadServiceBinder
-            downloadService = binder.getService()
-            bound = true
-        }
-
-        override fun onServiceDisconnected(arg0: ComponentName) {
-            bound = false
-        }
-    }
-
-    @Subscribe(threadMode = ThreadMode.MAIN)
+    @Subscribe(threadMode = ThreadMode.MAIN_ORDERED)
     fun onEvent(event: Any?) {
         runOnUiThread {
-            if (event is DownloadInfo) {
+            if (event is DownloadInfo && event.total > 0) {
                 mTvDownloadPercent.text = getString(
                     R.string.downloader_quantity_collapse,
                     event.completed,
                     event.total
                 )
-                viewGroupDownload.visibility = View.VISIBLE
+                if (event.completed < event.total) {
+                    viewGroupDownload.visibility = View.VISIBLE
+                }
             }
 
-            if (event?.javaClass == DownloadCountInfo::class.java) {
-                mTvDownloadPercent.text = getString(
-                    R.string.downloader_quantity_collapse,
-                    1,
-                    (event as DownloadCountInfo).total
-                )
-            }
-
-            if (event?.javaClass == DownloadErrorEvent::class.java && !QApplication.isActivityDownloadStarted) {
+            if (event is DownloadErrorEvent && !QApplication.isActivityDownloadStarted) {
                 AlertDialog.Builder(this@NavigationActivity)
                     .setTitle(R.string.download_error)
                     .setMessage(getString(R.string.download_error_message))
@@ -168,15 +140,14 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
             }
 
             if (event == DownloadService.DOWNLOAD_FINISH) {
-                viewGroupDownload.visibility = View.GONE
+                findViewById<View>(R.id.viewGroupDownload).visibility = View.GONE
             }
 
-            if (event?.javaClass == DownloadTrackErrorEvent::class.java) {
+            if (event is DownloadTrackErrorEvent) {
                 if (isNetworkAvailable()) {
-                    val trackInfo = event as DownloadTrackErrorEvent
-                    GlobalScope.launch {
+                    CoroutineScope(Dispatchers.IO).launch {
                         try {
-                            mViewModel.reportTrack(trackInfo.id, trackInfo.url)
+                            mViewModel.reportTrack(event.id, event.url)
                         } catch (_: HttpException) {
                         }
 
@@ -198,7 +169,7 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
         }
 
         if (isNetworkAvailable()) {
-            GlobalScope.launch {
+            CoroutineScope(Dispatchers.IO).launch {
                 val apkList = mViewModel.getApkList()
 
                 val currentVer = BuildConfig.VERSION_NAME
@@ -304,47 +275,14 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
 
     override fun onResume() {
         super.onResume()
-        if ((downloadService?.getCompletedFileCount() ?: 0) == (downloadService?.tracks?.size
-                ?: 0)
-        ) {
-            viewGroupDownload.visibility = View.GONE
-        }
         if (BuildConfig.IS_FREE) {
             quantumOnCreate()
         }
-        /* else {
-             var isAllPurchase = true
-             GlobalScope.launch {
-                 val albumList = ArrayList<Album>()
-                 val albumDao = DataBase.getInstance(applicationContext).albumDao()
-                 albumDao.getAllAlbums()?.let { albumList.addAll(it) }
-                 for (album in albumList) {
-                     if (!album.isUnlocked) {
-                         isAllPurchase = false
-                         break
-                     }
-                 }
-
-                 runOnUiThread(Runnable { callHadler(isAllPurchase) })
-             }
-
-         }*/
-
-        /* if(isNetworkAvailable()) {
-             if(BuildConfig.IS_FREE) {
-                 GetFlashSaleTask(this, this).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR)
-             }
-         }
-         else
-         {
-             showAlert(this,getString(R.string.err_network_available))
-         }*/
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.AppTheme)
         super.onCreate(savedInstanceState)
-        bindService(Intent(this, DownloadService::class.java), connection, BIND_AUTO_CREATE)
         setContentView(R.layout.activity_navigation)
 
         EventBus.getDefault().register(this)
@@ -407,21 +345,6 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
 
     }
 
-    private fun callHadler(isAllPurchase: Boolean) {
-        if (preference(applicationContext).isLogged && !isAllPurchase) {
-            val handler = Handler()
-            handler.postDelayed(Runnable {
-                openAd()
-
-            }, 30000)
-        }
-    }
-
-    private fun openAd() {
-        val intent = Intent(this, AdvActivity::class.java)
-        startActivity(intent)
-    }
-
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         orientationChangesUI(newConfig.orientation)
@@ -441,23 +364,11 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
     override fun onDestroy() {
         super.onDestroy()
         EventBus.getDefault().unregister(this)
-        EventBus.getDefault().unregister(this)
         DownloadService.stopService(this)
-
-        if (bound) {
-            unbindService(connection)
-        }
+        stopService(Intent(this, PlayerService::class.java))
     }
 
     private fun init() {
-
-//        firebaseAnalytics = Firebase.analytics
-//        val bundle = Bundle()
-//        bundle.putString(FirebaseAnalytics.Param.ITEM_ID, "id")
-//        bundle.putString(FirebaseAnalytics.Param.ITEM_NAME, "name")
-//        bundle.putString(FirebaseAnalytics.Param.CONTENT_TYPE, "image")
-//        firebaseAnalytics.logEvent("Navigation_Activity_Test", bundle)
-
         mViewModel = ViewModelProvider(
             this, ViewModelFactory(
                 ApiHelper(RetrofitBuilder(applicationContext).apiService),
@@ -471,10 +382,6 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
 
         flash_sale.visibility = View.GONE //At the request of the client
 
-        // if (BuildConfig.IS_FREE) {
-        //  flash_sale.visibility = View.GONE
-        // nav_view.menu.removeItem(R.id.navigation_videos)
-        //  }
 
         viewGroupDownload.setOnClickListener {
             startActivity(
@@ -488,7 +395,7 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
         mCallbackManager = CallbackManager.Factory.create()
         LoginManager.getInstance()
             .registerCallback(mCallbackManager, object : FacebookCallback<LoginResult> {
-                override fun onSuccess(loginResult: LoginResult) {
+                override fun onSuccess(result: LoginResult) {
                     Log.d("FACEBOOK", "Login onSuccess")
                 }
 
@@ -496,7 +403,7 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
                     Log.d("FACEBOOK", "Login onCancel")
                 }
 
-                override fun onError(exception: FacebookException) {
+                override fun onError(error: FacebookException) {
                     Log.d("FACEBOOK", "Login onError")
                 }
             })
@@ -610,8 +517,6 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
                 .beginTransaction()
                 .add(R.id.player_ui_container, playerUI!!, playerUI!!.javaClass.simpleName)
                 .commitNow()
-        }else{
-
         }
     }
 
@@ -629,9 +534,9 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
     //region SEARCH
     private fun initSearch() {
         //albums search
-        mAlbumsSearchAdapter = AlbumsSearchAdapter(applicationContext, ArrayList())
-        mAlbumsSearchAdapter!!.setOnClickListener(object : AlbumsSearchAdapter.Listener {
+        mAlbumsSearchAdapter.setOnClickListener(object : AlbumsSearchAdapter.Listener {
             override fun onAlbumSearchClick(album: Album, i: Int) {
+                view_data.visibility = View.GONE
                 startAlbumDetails(album)
             }
         })
@@ -640,10 +545,10 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
         search_albums_recycler.itemAnimator = null
 
         //track search
-        mTracksSearchAdapter = TracksSearchAdapter(applicationContext, ArrayList())
-        mTracksSearchAdapter!!.setOnClickListener(object : TracksSearchAdapter.Listener {
+        mTracksSearchAdapter.setOnClickListener(object : TracksSearchAdapter.Listener {
             override fun onTrackSearchClick(track: Track, i: Int) {
-                GlobalScope.launch {
+                CoroutineScope(Dispatchers.IO).launch {
+                    view_data.visibility = View.GONE
                     val album = mViewModel.getAlbumById(track.albumId)
                     CoroutineScope(Dispatchers.Main).launch { album?.let { startAlbumDetails(it) } }
                 }
@@ -654,28 +559,15 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
         search_tracks_recycler.itemAnimator = null
 
         //program search
-        mProgramsSearchAdapter = ProgramsSearchAdapter(applicationContext, ArrayList())
-        mProgramsSearchAdapter?.setOnClickListener(object : ProgramsSearchAdapter.Listener {
+        mProgramsSearchAdapter.setOnClickListener(object : ProgramsSearchAdapter.Listener {
             override fun onProgramSearchClick(program: Program, i: Int) {
-//                supportFragmentManager
-//                        .beginTransaction()
-//                        .setCustomAnimations(
-//                                R.anim.trans_right_to_left_in,
-//                                R.anim.trans_right_to_left_out
-//                        )
-//                        .replace(
-//                                R.id.nav_host_fragment,
-//                                ProgramDetailFragment.newInstance(program.id),
-//                                ProgramDetailFragment().javaClass.simpleName
-//                        )
-//                        .commit()
-
+                view_data.visibility = View.GONE
                 if (program.isUnlocked) {
                     if (isTrackAdd && trackIdForProgram != -1) {
                         val db = DataBase.getInstance(this@NavigationActivity)
                         val programDao = db.programDao()
 
-                        GlobalScope.launch {
+                        CoroutineScope(Dispatchers.IO).launch {
                             val p = programDao.getProgramById(program.id)
                             p?.records?.add(trackIdForProgram!!)
                             p?.let { it1 -> programDao.updateProgram(it1) }
@@ -734,13 +626,15 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
                 }
             }
 
-            mAlbumsSearchAdapter?.setData(converted)
+            mAlbumsSearchAdapter.setData(converted)
             if (converted.size != 0) {
                 lblheaderalbums.visibility = View.VISIBLE
                 lblnoresult.visibility = View.GONE
             } else {
                 lblheaderalbums.visibility = View.GONE
-                if (mAlbumsSearchAdapter?.itemCount == 0 && mProgramsSearchAdapter?.itemCount == 0 && mTracksSearchAdapter?.itemCount == 0)
+                if (mAlbumsSearchAdapter.itemCount == 0
+                    && mProgramsSearchAdapter.itemCount == 0
+                    && mTracksSearchAdapter.itemCount == 0)
                     lblnoresult.visibility = View.VISIBLE
             }
 
@@ -770,10 +664,10 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
                 lblnoresult.visibility = View.GONE
             } else {
                 lblheaderfrequencies.visibility = View.GONE
-                if (mAlbumsSearchAdapter?.itemCount == 0 && mProgramsSearchAdapter?.itemCount == 0 && mTracksSearchAdapter?.itemCount == 0)
+                if (mAlbumsSearchAdapter.itemCount == 0 && mProgramsSearchAdapter.itemCount == 0 && mTracksSearchAdapter.itemCount == 0)
                     lblnoresult.visibility = View.VISIBLE
             }
-            mTracksSearchAdapter?.setData(converted)
+            mTracksSearchAdapter.setData(converted)
         }
 
         programsSearch.observe(this) {
@@ -782,15 +676,15 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
                 lblnoresult.visibility = View.GONE
             } else {
                 lblheaderprograms.visibility = View.GONE
-                if (mAlbumsSearchAdapter?.itemCount == 0 && mProgramsSearchAdapter?.itemCount == 0 && mTracksSearchAdapter?.itemCount == 0)
+                if (mAlbumsSearchAdapter.itemCount == 0 && mProgramsSearchAdapter.itemCount == 0 && mTracksSearchAdapter.itemCount == 0)
                     lblnoresult.visibility = View.VISIBLE
             }
-            mProgramsSearchAdapter?.setData(it)
+            mProgramsSearchAdapter.setData(it)
         }
     }
 
     private fun search(s: CharSequence) {
-        GlobalScope.launch {
+        CoroutineScope(Dispatchers.IO).launch {
             val albums = mViewModel.searchAlbum("%$s%")
             val tracks = mViewModel.searchTrack("%$s%")
             val programs = mViewModel.searchProgram("%$s%")
@@ -813,9 +707,9 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
     }
 
     private fun clearSearch() {
-        mAlbumsSearchAdapter?.setData(ArrayList())
-        mTracksSearchAdapter?.setData(ArrayList())
-        mProgramsSearchAdapter?.setData(ArrayList())
+        mAlbumsSearchAdapter.setData(ArrayList())
+        mTracksSearchAdapter.setData(ArrayList())
+        mProgramsSearchAdapter.setData(ArrayList())
         lblheaderprograms.visibility = View.GONE
         lblheaderfrequencies.visibility = View.GONE
         lblheaderalbums.visibility = View.GONE
@@ -962,6 +856,8 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
         }
     }
 
+    @Suppress("DEPRECATION")
+    @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         mCallbackManager!!.onActivityResult(requestCode, resultCode, data)
@@ -1006,8 +902,7 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
     override fun onConnectionSuccess(task: BaseTask<*>?, data: Any?) {
         if (task is GetFlashSaleTask) {
             val jsonFlashSale = data as String
-            Log.i("jsonre", "r-->" + jsonFlashSale.toString());
-            if (jsonFlashSale != null && jsonFlashSale.length > 0) {
+            if (jsonFlashSale.isNotEmpty()) {
                 val jsonCurrent = Gson().fromJson(jsonFlashSale, GetFlashSaleOutput::class.java)
 
 //                Luon hien flash sale
@@ -1024,7 +919,7 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
                 if (jsonOrgrialString != null) {
                     val jsonOrgrial =
                         Gson().fromJson(jsonOrgrialString, GetFlashSaleOutput::class.java)
-                    if (jsonOrgrial != null && jsonOrgrial.flashSale != null) {
+                    if (jsonOrgrial?.flashSale != null) {
                         flashsaleOrgrialString = Gson().toJson(jsonOrgrial.flashSale)
                     }
                 }
@@ -1034,10 +929,7 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
                 if (!flashsaleCurrentString.equals(flashsaleOrgrialString, ignoreCase = true)) {
                     SharedPreferenceHelper.getInstance()
                         .setInt(Constants.PREF_FLASH_SALE_COUNTERED, 0)
-                    loadDs()
                 }
-
-                fetchInterstitialDs()
 
                 if (SharedPreferenceHelper.getInstance()
                         .getInt(Constants.PREF_FLASH_SALE_COUNTERED) <= jsonCurrent.flashSale.proposalsCount!!
@@ -1070,20 +962,6 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
         }
     }
 
-    fun loadDs() {
-        val jsonOrgrialString = SharedPreferenceHelper.getInstance().get(Constants.PREF_FLASH_SALE)
-        if (jsonOrgrialString != null && jsonOrgrialString.length > 0) {
-            val flashSaleOutput = Gson().fromJson<GetFlashSaleOutput>(
-                jsonOrgrialString,
-                GetFlashSaleOutput::class.java!!
-            )
-
-            if (flashSaleOutput.advertisements != null && flashSaleOutput.advertisements.enableBanner!! && (this is NavigationActivity)) {
-
-            }
-        }
-    }
-
     private var mCountDownTimer: CountDownTimer? = null
 
     private fun setCountdownTimer(totalTime: Long) {
@@ -1100,9 +978,9 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
                 val mins = remainder / 60
                 remainder -= mins * 60
                 val secs = remainder
-                var hour: String = if (hours > 9) "" + hours else "0$hours"
-                var min: String = if (mins > 9) "" + mins else "0$mins"
-                var second: String = if (secs > 9) "" + secs else "0$secs"
+                val hour: String = if (hours > 9) "" + hours else "0$hours"
+                val min: String = if (mins > 9) "" + mins else "0$mins"
+                val second: String = if (secs > 9) "" + secs else "0$secs"
                 if (SharedPreferenceHelper.getInstance().getBool(Constants.KEY_PURCHASED)
                     && SharedPreferenceHelper.getInstance()
                         .getBool(Constants.KEY_PURCHASED_ADVANCED)
@@ -1115,10 +993,9 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
                 } else {
                     flash_sale.visibility = View.GONE
                 }
-//                mTvDurationCountDown.text = "$hour:$min:$second"
-                flash_sale_hours.text = "$hour"
-                flash_sale_minutes.text = "$min"
-                flash_sale_seconds.text = "$second"
+                flash_sale_hours.text = hour
+                flash_sale_minutes.text = min
+                flash_sale_seconds.text = second
             }
 
             override fun onFinish() {
@@ -1130,21 +1007,6 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
     }
 
 
-    fun fetchInterstitialDs() {
-        val jsonOrgrialString = SharedPreferenceHelper.getInstance().get(Constants.PREF_FLASH_SALE)
-        if (jsonOrgrialString != null && jsonOrgrialString.length > 0) {
-            val flashSaleOutput = Gson().fromJson<GetFlashSaleOutput>(
-                jsonOrgrialString,
-                GetFlashSaleOutput::class.java!!
-            )
-            if (flashSaleOutput != null && flashSaleOutput.advertisements != null && flashSaleOutput.advertisements.enable!!) {
-                if (!SharedPreferenceHelper.getInstance().getBool(Constants.KEY_PURCHASED)) {
-
-                }
-            }
-        }
-    }
-
     fun askRating() {
         AppRating.Builder(this)
             .setMinimumLaunchTimes(9)
@@ -1152,10 +1014,10 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
             .setMinimumLaunchTimesToShowAgain(9)
             .setMinimumDaysToShowAgain(3)
             .setRatingThreshold(RatingThreshold.FOUR)
-            .setConfirmButtonClickListener(object : ConfirmButtonClickListener {
-                override fun onClick(userRating: Float) {
-                    AppRating.openPlayStoreListing(this@NavigationActivity)
-                }
+            .setConfirmButtonClickListener(ConfirmButtonClickListener {
+                AppRating.openPlayStoreListing(
+                    this@NavigationActivity
+                )
             })
             .showIfMeetsConditions()
     }

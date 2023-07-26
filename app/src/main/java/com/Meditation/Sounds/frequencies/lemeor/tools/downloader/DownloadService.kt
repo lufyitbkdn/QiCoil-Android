@@ -49,7 +49,7 @@ class DownloadService : LifecycleService() {
         }
     }
 
-    var tracks = ArrayList<Track>()
+    var tracks = mutableListOf<Track>()
         private set
 
     var downloadErrorTracks = ArrayList<Int>()
@@ -73,40 +73,49 @@ class DownloadService : LifecycleService() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Downloading files...")
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setNotificationSilent()
             .build()
         startForeground(1, notification)
 
-        var tracks: List<Track> = intent?.getParcelableArrayListExtra(EXTRA_TRACKS)!!
-        tracks = tracks.filter {
-            !this.tracks.any { track ->
-                track.id == it.id && it.albumId == track.albumId
+        val tracks: List<Track> = intent?.getParcelableArrayListExtra(EXTRA_TRACKS)!!
+        val needToDownloadTrack =
+            this.tracks.filter { downloadErrorTracks.contains(it.id) }.toMutableList()
+        this.tracks = this.tracks.filter { !downloadErrorTracks.contains(it.id) }.toMutableList()
+        tracks.forEach {
+            if (!this.tracks.any { track -> track.id == it.id }
+                && !downloadErrorTracks.contains(it.id)) {
+                needToDownloadTrack.add(it)
             }
         }
-        if (tracks.isNotEmpty()) {
-            if (getCompletedFileCount() == this.tracks.size) {
-                this.tracks.clear()
-                fileProgressMap.clear()
+        downloadErrorTracks.clear()
+        if (getCompletedFileCount() == this.tracks.size) {
+            this.tracks.clear()
+            fileProgressMap.clear()
+        }
+        this.tracks.addAll(needToDownloadTrack)
+        val dao = DataBase.getInstance(applicationContext).albumDao()
+        CoroutineScope(Dispatchers.IO).launch {
+            needToDownloadTrack.forEach { t ->
+                val album = dao.getAlbumById(t.albumId)
+                t.album = album
             }
-            this.tracks.addAll(tracks)
-            val dao = DataBase.getInstance(applicationContext).albumDao()
-            GlobalScope.launch {
-                tracks.forEach { t ->
-                    val album = dao.getAlbumById(t.albumId)
-                    t.album = album
-                }
 
-                CoroutineScope(Dispatchers.Main).launch {
-                    enqueueFiles(tracks)
+            CoroutineScope(Dispatchers.Main).launch {
+                enqueueFiles(needToDownloadTrack)
 
-                    EventBus.getDefault().post(
-                        DownloadInfo(
-                            "",
-                            0,
-                            getCompletedFileCount(),
-                            tracks.size
-                        )
+                EventBus.getDefault().post(
+                    DownloadInfo(
+                        "",
+                        0,
+                        getCompletedFileCount(),
+                        this@DownloadService.tracks.size
                     )
+                )
+                if (this@DownloadService.tracks.isEmpty()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    } else {
+                        stopForeground(true)
+                    }
                 }
             }
         }
@@ -117,8 +126,10 @@ class DownloadService : LifecycleService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val serviceChannel = NotificationChannel(
                 CHANNEL_ID, "Download Service Channel",
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                setSound(null, null)
+            }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
         }
@@ -132,7 +143,7 @@ class DownloadService : LifecycleService() {
     }
 
     private fun updateUIWithProgress() {
-        val totalFiles: Int = fileProgressMap.size
+        val totalFiles: Int = tracks.size
         val completedFiles: Int = getCompletedFileCount()
 
         if (completedFiles == totalFiles) {
@@ -144,12 +155,16 @@ class DownloadService : LifecycleService() {
 
             EventBus.getDefault().post(DOWNLOAD_FINISH)
 
-            stopSelf()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                stopForeground(true)
+            }
         }
     }
 
     private fun checkDoneDownloaded() {
-        val totalFiles: Int = fileProgressMap.size
+        val totalFiles: Int = tracks.size
         val completedFiles: Int = getCompletedFileCount()
         if ((completedFiles + downloadErrorTracks.size) == totalFiles && downloadErrorTracks.size > 0) {
             EventBus.getDefault().post(DownloadErrorEvent(downloadErrorTracks.size))
@@ -185,7 +200,6 @@ class DownloadService : LifecycleService() {
             .observe(this) { workInfo ->
                 CoroutineScope(Dispatchers.Main).launch {
                     val wasSuccess = workInfo.state == WorkInfo.State.SUCCEEDED
-
                     if (wasSuccess) {
                         val trackId =
                             workInfo.outputData.getInt(DownLoadCourseAudioWorkManager.TRACK_ID, 0)
@@ -202,21 +216,23 @@ class DownloadService : LifecycleService() {
                             )
                         )
                     } else if (workInfo.state == WorkInfo.State.FAILED) {
-                        val trackId =
-                            workInfo.outputData.getInt(DownLoadCourseAudioWorkManager.TRACK_ID, 0)
-                        if (!downloadErrorTracks.any { trackId == it }) {
-                            tracks.firstOrNull { trackId == it.id }?.let {
-                                downloadErrorTracks.add(it.id)
-                                EventBus.getDefault()
-                                    .post(
-                                        DownloadTrackErrorEvent(
-                                            trackId,
-                                            getTrackUrl(it.album, it.filename)
+                        workInfo.tags.firstOrNull { it.startsWith("track") }?.let { tag ->
+                            val trackId = tag.replace("track_", "").toInt()
+                            if (!downloadErrorTracks.any { trackId == it }) {
+                                tracks.firstOrNull { trackId == it.id }?.let {
+                                    downloadErrorTracks.add(it.id)
+                                    EventBus.getDefault()
+                                        .post(
+                                            DownloadTrackErrorEvent(
+                                                trackId,
+                                                getTrackUrl(it.album, it.filename)
+                                            )
                                         )
-                                    )
+                                }
                             }
+                            checkDoneDownloaded()
                         }
-                        checkDoneDownloaded()
+
                     } else if (workInfo != null) {
                         val total =
                             workInfo.progress.getLong(DownLoadCourseAudioWorkManager.TOTAL, 0L)

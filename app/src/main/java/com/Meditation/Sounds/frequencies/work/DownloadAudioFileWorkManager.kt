@@ -2,8 +2,10 @@ package com.Meditation.Sounds.frequencies.work
 
 
 import android.content.Context
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.Data
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -29,25 +31,25 @@ class DownLoadCourseAudioWorkManager(
         val albumName = inputData.getString(ALBUM_NAME) ?: ""
         val fileName = inputData.getString(FILE_NAME) ?: ""
         val trackId = inputData.getInt(TRACK_ID, 0)
-        val tmpFile = File(getTempFile(context, fileName ,albumName))
+        val tmpFile = File(getTempFile(context, fileName, albumName))
         return try {
             if (url != null) {
                 val targetFile = File(getSaveDir(context, fileName, albumName))
                 var percentage = 0L
                 if (!targetFile.exists()) {
-                        FileDownloader.download(url, tmpFile) { downloaded, total ->
-                            if ((downloaded * 100 / total) - percentage >= 1 || (downloaded * 100 / total) == 100L) {
-                                percentage = downloaded * 100 / total
-                                setProgressAsync(
-                                    workDataOf(
-                                        TRACK_ID to trackId,
-                                        DOWNLOADED to downloaded,
-                                        TOTAL to total,
-                                    )
+                    FileDownloader.download(url, tmpFile) { downloaded, total ->
+                        if ((downloaded * 100 / total) - percentage >= 1 || (downloaded * 100 / total) == 100L) {
+                            percentage = downloaded * 100 / total
+                            setProgressAsync(
+                                workDataOf(
+                                    TRACK_ID to trackId,
+                                    DOWNLOADED to downloaded,
+                                    TOTAL to total,
                                 )
-                            }
-
+                            )
                         }
+
+                    }
 
                     tmpFile.renameTo(targetFile)
                     val outputData = workDataOf(
@@ -72,7 +74,12 @@ class DownLoadCourseAudioWorkManager(
             }
         } catch (e: Throwable) {
             e.printStackTrace()
-            Result.failure(workDataOf(ERROR to e))
+            Result.failure(
+                workDataOf(
+                    ERROR to e,
+                    TRACK_ID to trackId
+                )
+            )
         }
 
     }
@@ -88,12 +95,12 @@ class DownLoadCourseAudioWorkManager(
         const val ERROR = "error"
         const val TAG = "DownLoadCourseAudioWorkManager"
 
-        fun getTag(trackId:Int) = "track_$trackId"
+        fun getTag(trackId: Int) = "track_$trackId"
 
         fun start(context: Context, track: Track, album: Album?): OneTimeWorkRequest {
             val inputData = Data.Builder()
                 .putInt(TRACK_ID, track.id)
-                .putString(ALBUM_NAME, album?.audio_folder?:"")
+                .putString(ALBUM_NAME, album?.audio_folder ?: "")
                 .putString(FILE_NAME, track.filename)
                 .putString(URL, getTrackUrl(album, track.filename))
 
@@ -102,6 +109,9 @@ class DownLoadCourseAudioWorkManager(
                     .setInputData(inputData.build())
                     .addTag(getTag(trackId = track.id))
                     .addTag(TAG)
+                    .setConstraints(
+                        Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+                    )
                     .build()
 
             WorkManager

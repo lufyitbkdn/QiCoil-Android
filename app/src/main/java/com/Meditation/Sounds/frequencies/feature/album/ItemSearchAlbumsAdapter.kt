@@ -9,7 +9,7 @@ import com.Meditation.Sounds.frequencies.R
 import com.Meditation.Sounds.frequencies.models.Album
 import kotlinx.android.synthetic.main.item_search.view.*
 
-class ItemSearchAlbumsAdapter(var context: Context, var data: List<Album>, var listener: IOnClickItemListener)
+class ItemSearchAlbumsAdapter(var data: List<Album>, var listener: IOnClickItemListener)
     : RecyclerView.Adapter<ItemSearchAlbumsAdapter.ViewHolder>() {
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         return ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_search, parent, false))
@@ -23,9 +23,7 @@ class ItemSearchAlbumsAdapter(var context: Context, var data: List<Album>, var l
         val item = data[position]
         holder.itemView.tvSearch.text = item.name
         holder.itemView.tvSearch.setOnClickListener {
-            listener?.let {
-                it.onClickItem(position)
-            }
+            listener.onClickItem(position)
         }
     }
 

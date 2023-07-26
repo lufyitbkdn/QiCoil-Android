@@ -10,8 +10,7 @@ import com.Meditation.Sounds.frequencies.lemeor.data.model.Album
 import kotlinx.android.synthetic.main.item_search.view.*
 
 class AlbumsSearchAdapter(
-        private val mContext: Context,
-        private var mData: List<Album>,
+    private var mData: List<Album> = arrayListOf(),
 ) : RecyclerView.Adapter<AlbumsSearchAdapter.ViewHolder>() {
 
     interface Listener {

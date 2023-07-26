@@ -19,7 +19,8 @@ import javax.net.ssl.X509TrustManager
 class RetrofitBuilder(val context: Context) {
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = if(BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else
+            HttpLoggingInterceptor.Level.NONE
     }
 
     private val authInterceptor = ApiInterceptor(context)

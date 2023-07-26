@@ -178,7 +178,7 @@
                 android:layout_margin="@dimen/margin_buttons" />
         </LinearLayout>
 
-        <ScrollView
+        <androidx.core.widget.NestedScrollView
             android:id="@+id/view_data"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -211,6 +211,7 @@
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/rcAlbumSearch"
                     android:layout_width="match_parent"
+                    android:nestedScrollingEnabled="false"
                     android:layout_height="wrap_content" />
 
                 <com.Meditation.Sounds.frequencies.views.CustomFontTextView
@@ -225,6 +226,7 @@
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/rcFrequenciesSearch"
+                    android:nestedScrollingEnabled="false"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content" />
 
@@ -240,9 +242,10 @@
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/rcProgramSearch"
+                    android:nestedScrollingEnabled="false"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content" />
             </LinearLayout>
-        </ScrollView>
+        </androidx.core.widget.NestedScrollView>
     </FrameLayout>
 </LinearLayout>

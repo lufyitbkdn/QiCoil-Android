@@ -226,7 +226,7 @@
             android:layout_height="0dp"
             android:layout_weight="0" />
 
-        <ScrollView
+        <androidx.core.widget.NestedScrollView
             android:id="@+id/view_data"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -270,6 +270,7 @@
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/search_categories_recycler"
                     android:layout_width="match_parent"
+                    android:nestedScrollingEnabled="false"
                     android:layout_height="wrap_content"
                     android:overScrollMode="never"
                     android:visibility="gone"
@@ -294,6 +295,7 @@
                         android:id="@+id/search_albums_recycler"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:nestedScrollingEnabled="false"
                         android:overScrollMode="never"
                         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
                 </RelativeLayout>
@@ -316,6 +318,7 @@
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/search_tracks_recycler"
                         android:layout_width="match_parent"
+                        android:nestedScrollingEnabled="false"
                         android:layout_height="wrap_content"
                         android:overScrollMode="never"
                         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
@@ -344,7 +347,7 @@
                         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
                 </RelativeLayout>
             </LinearLayout>
-        </ScrollView>
+        </androidx.core.widget.NestedScrollView>
     </LinearLayout>
 
     <LinearLayout

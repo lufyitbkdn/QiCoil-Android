@@ -51,20 +51,21 @@ class DownloaderActivity : AppCompatActivity() {
             activity: Activity,
             tracks: ArrayList<Track>,
         ) {
-            if (ContextCompat.checkSelfPermission(
-                    activity,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                DownloadService.startService(context = activity, tracks)
-            } else {
-                ActivityCompat.requestPermissions(
-                    activity,
-                    arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                    STORAGE_PERMISSION_CODE
-                )
+            if (tracks.isNotEmpty()) {
+                if (ContextCompat.checkSelfPermission(
+                        activity,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    DownloadService.startService(context = activity, tracks)
+                } else {
+                    ActivityCompat.requestPermissions(
+                        activity,
+                        arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                        STORAGE_PERMISSION_CODE
+                    )
+                }
             }
-
         }
     }
 
@@ -113,7 +114,11 @@ class DownloaderActivity : AppCompatActivity() {
             mDownloaderAdapter.downloadErrorTracks = downloadService!!.downloadErrorTracks
 
             downloader_tv_quantity.text =
-                getString(R.string.downloader_quantity, 0, mDownloaderAdapter.itemCount)
+                getString(
+                    R.string.downloader_quantity,
+                    downloadService!!.getCompletedFileCount(),
+                    mDownloaderAdapter.itemCount
+                )
         }
 
         override fun onServiceDisconnected(arg0: ComponentName) {
@@ -121,7 +126,6 @@ class DownloaderActivity : AppCompatActivity() {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.N)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_downloader)

@@ -52,6 +52,7 @@ class PlayerUIFragment : NewBaseFragment() {
                 }
             }
         }
+
     private var serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             playerServiceBinder = binder as PlayerService.PlayerServiceBinder
@@ -81,6 +82,7 @@ class PlayerUIFragment : NewBaseFragment() {
     private var playing: Boolean = false
     private var repeat: Int = Player.REPEAT_MODE_ONE
     private var shuffle: Boolean = false
+    private var isSeeking = false
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -115,23 +117,29 @@ class PlayerUIFragment : NewBaseFragment() {
 
         currentPosition.observe(viewLifecycleOwner) {
             track_position.text = getConvertedTime(it)
-            seekBar.progress = it.toInt()
+            if(!isSeeking) {
+                seekBar.progress = it.toInt()
+            }
         }
         max.observe(viewLifecycleOwner) {
             seekBar.max = it.toInt()
         }
 
         duration.observe(viewLifecycleOwner) {
+            seekBar.isEnabled = it > 0
             track_duration.text = getConvertedTime(it)
         }
 
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(p0: SeekBar?, p1: Int, p2: Boolean) {}
+            override fun onProgressChanged(p0: SeekBar, p1: Int, p2: Boolean) {}
 
-            override fun onStartTrackingTouch(p0: SeekBar?) {}
+            override fun onStartTrackingTouch(p0: SeekBar) {
+                isSeeking = true
+            }
 
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                EventBus.getDefault().post(PlayerSeek(seekBar?.progress))
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                isSeeking = false
+                EventBus.getDefault().post(PlayerSeek(seekBar.progress))
             }
         })
     }
@@ -212,6 +220,6 @@ class PlayerUIFragment : NewBaseFragment() {
         playerServiceBinder = null
         mediaController?.unregisterCallback(callback)
         mediaController = null
-        serviceConnection?.let { requireContext().unbindService(it) }
+        serviceConnection.let { requireContext().unbindService(it) }
     }
 }

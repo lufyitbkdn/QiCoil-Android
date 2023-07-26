@@ -193,27 +193,24 @@ class NewAlbumDetailFragment : Fragment() {
                 val tracks = ArrayList<Track>()
                 val trackDao = DataBase.getInstance(requireContext()).trackDao()
 
-                GlobalScope.launch {
+                CoroutineScope(Dispatchers.IO).launch {
                     album.tracks.forEach { t ->
                         val track = trackDao.getTrackById(t.id)
                         val file = File(getSaveDir(requireContext(), t.filename, album.audio_folder))
                         val preloaded = File(getPreloadedSaveDir(requireContext(), t.filename, album.audio_folder))
 
                         if (!file.exists() && !preloaded.exists()) {
-                            GlobalScope.launch {
-                                trackDao.isTrackDownloaded(true, track?.id ?: 0)
-                            }
+                            trackDao.isTrackDownloaded(true, track?.id ?: 0)
                             track?.isDownloaded = false
                             track?.let { tracks.add(it) }
                         }
-
+                        t.album = album
                     }
 
                     CoroutineScope(Dispatchers.Main).launch {
                         activity?.let {
                             DownloaderActivity.startDownload(it, tracks)
                         }
-//                    startActivity(DownloaderActivity.newIntent(requireContext(), tracks))
                     }
 
                 }
@@ -238,7 +235,7 @@ class NewAlbumDetailFragment : Fragment() {
         val local = album.tracks
         val db = DataBase.getInstance(requireContext())
 
-        GlobalScope.launch {
+        CoroutineScope(Dispatchers.IO).launch {
             local.forEach {
                 try {
                     val track = db.trackDao().getTrackById(it.id)

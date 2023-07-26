@@ -10,8 +10,7 @@ import com.Meditation.Sounds.frequencies.lemeor.data.model.Track
 import kotlinx.android.synthetic.main.item_search.view.*
 
 class TracksSearchAdapter(
-        private val mContext: Context,
-        private var mData: List<Track>,
+    private var mData: List<Track> = arrayListOf(),
 ) : RecyclerView.Adapter<TracksSearchAdapter.ViewHolder>() {
 
     interface Listener {

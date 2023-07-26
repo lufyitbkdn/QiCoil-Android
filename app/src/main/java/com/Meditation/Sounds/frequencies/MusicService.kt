@@ -7,7 +7,7 @@ import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.*
 import android.util.Log
-import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationCompat
 import com.Meditation.Sounds.frequencies.feature.main.MainActivity
 import com.Meditation.Sounds.frequencies.models.PlaylistItem
 import com.Meditation.Sounds.frequencies.models.PlaylistItemSong
@@ -18,7 +18,8 @@ import java.util.*
 import kotlin.collections.ArrayList
 
 
-class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnErrorListener, MediaPlayer.OnCompletionListener {
+class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnErrorListener,
+    MediaPlayer.OnCompletionListener {
     enum class RepeatType {
         NONE, ONE, ALL
     }
@@ -54,23 +55,6 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
     var longestDurationPlayer: ExtendExoPlayer? = null
     var isRequestAudioFocus = true
 
-
-    var mCountDownTimerStart: CountDownTimer? = null
-    var mCountDownTimerEnd: CountDownTimer? = null
-    var mCountDownTimerStartFinish = false
-    var mCountDownTimerEndFinish = false
-    fun cancelCountDownStart() {
-        if (mCountDownTimerStart != null) {
-            mCountDownTimerStart!!.cancel()
-        }
-    }
-
-    fun cancelCountDownEnd() {
-        if (mCountDownTimerEnd != null) {
-            mCountDownTimerEnd!!.cancel()
-        }
-    }
-
     private val mDurationUpdateRunnable = object : Runnable {
         override fun run() {
             try {
@@ -81,55 +65,35 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
                         if (songFromPlayer != null) {
                             try {
 
-                                val currentPosition = (longestDurationPlayer!!.ratioDiv.toInt() * longestDurationPlayer!!.duration() + longestDurationPlayer!!.currentPosition()) - songFromPlayer.item.startOffset.toInt()
-//                                var duration = longestDurationPlayer!!.duration - songFromPlayer.item.startOffset.toInt()
-                                val totalDuration = songFromPlayer.item.endOffset.toInt() - songFromPlayer.item.startOffset.toInt()
-
-//                                if (totalDuration - currentPosition <= 5000) {
-//                                if (currentPosition<5000) {
-//                                    setCountDownTimerStart(songFromPlayer)
-//                                }
-//
-//                                val timerEnd = totalDuration - currentPosition
-//                                if (timerEnd < 5000) {
-//                                    setCountDownTimerEnd(songFromPlayer)
-//                                }
-//                                }
+                                val currentPosition =
+                                    (longestDurationPlayer!!.ratioDiv.toInt() * longestDurationPlayer!!.duration() + longestDurationPlayer!!.currentPosition()) - songFromPlayer.item.startOffset.toInt()
+                                val totalDuration =
+                                    songFromPlayer.item.endOffset.toInt() - songFromPlayer.item.startOffset.toInt()
 
                                 for (callback in callbacks) {
-                                    callback.updateDurationPlayer(totalDuration, currentPosition, songFromPlayer)
+                                    callback.updateDurationPlayer(
+                                        totalDuration,
+                                        currentPosition,
+                                        songFromPlayer
+                                    )
                                 }
-                            } catch (ex: IllegalStateException) {
+                            } catch (_: IllegalStateException) {
                             }
                         }
                     }
                 }
-            } catch (ex: IllegalStateException) {
+            } catch (_: IllegalStateException) {
 
             }
         }
     }
-
-    //playback methods
-    val currentPosition: Int
-        get() {
-            if (players.size > 0) {
-                var currentPosition = 0
-                for (player in players) {
-                    currentPosition = Math.max(currentPosition, player.currentPosition())
-                }
-                return currentPosition
-            }
-
-            return 0
-        }
 
     val duration: Int
         get() {
             if (players.size > 0) {
                 var duration = 0
                 for (player in players) {
-                    duration = Math.max(duration, player.duration())
+                    duration = duration.coerceAtLeast(player.duration())
                 }
                 return duration
             }
@@ -141,10 +105,6 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
     var isPlaying = false
     lateinit var mAudioManager: AudioManager
 
-    var deltaValue: Float = 0f
-    var speed: Float = 0.05f
-    var timerList = ArrayList<Timer>()
-
     override fun onCreate() {
         //create the service
         super.onCreate()
@@ -154,10 +114,6 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
         //random
         rand = Random()
         mAudioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        //create player
-//        player = MediaPlayer()
-        //initialize
-//        initMusicPlayer()
     }
 
     fun addCallback(callback: Callback) {
@@ -168,11 +124,7 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
         iSongPlaying.add(callback)
     }
 
-    fun removeCallback(callback: Callback) {
-        callbacks.remove(callback)
-    }
-
-    fun initMusicPlayer(): ExtendExoPlayer {
+    private fun initMusicPlayer(): ExtendExoPlayer {
         val player = ExtendExoPlayer(this)
 //        //set player properties
 //        player.setWakeMode(applicationContext,
@@ -247,7 +199,7 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
             songAndSongs.add(itemSongAndSong)
         }
 
-        for (i in 0..songAndSongs.size - 1) {
+        for (i in 0 until songAndSongs.size) {
             val itemSong = PlaylistItemSongAndSong()
             val playlistItem = PlaylistItem()
             itemSong.song = songAndSongs[i].song
@@ -310,7 +262,7 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
     }
 
     //activity will bind to service
-    override fun onBind(intent: Intent): IBinder? {
+    override fun onBind(intent: Intent): IBinder {
         return musicBind
     }
 
@@ -322,7 +274,7 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
     }
 
     //play a song
-    fun playSong(isPauseImmediatelyStarted: Boolean) {
+    private fun playSong(isPauseImmediatelyStarted: Boolean) {
         if (playlistItems!!.size == 0) {
             return
         }
@@ -335,14 +287,19 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
         players.clear()
         longestDurationPlayer = null
         if (playlistItems != null && playlistItems!!.isNotEmpty()
-                && songPosition > -1 && songPosition < playlistItems!!.size) {
+            && songPosition > -1 && songPosition < playlistItems!!.size
+        ) {
             //reset all players
             val playItem = playlistItems!![songPosition]
             val playSongs = playItem.songs
             //set Volume
             if (playSongs.size > 0) {
-                var max = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round((playSongs.get(0).item.volumeLevel * max)), 0)
+                val max = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                mAudioManager.setStreamVolume(
+                    AudioManager.STREAM_MUSIC,
+                    Math.round((playSongs.get(0).item.volumeLevel * max)),
+                    0
+                )
             }
 
 
@@ -402,36 +359,30 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
         updateDurationPlayer()
     }
 
-    fun requestToSilentOtherMusicApps() {
+    private fun requestToSilentOtherMusicApps() {
         isRequestAudioFocus = false
-        mAudioManager.requestAudioFocus(object : AudioManager.OnAudioFocusChangeListener {
-            override fun onAudioFocusChange(p0: Int) {
+        mAudioManager.requestAudioFocus(
+            AudioManager.OnAudioFocusChangeListener { p0 ->
                 when (p0) {
                     AudioManager.AUDIOFOCUS_GAIN, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                         isRequestAudioFocus = false
                     } // Resume your media player here
                     AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                         pausePlayer()
-//                        mAudioManager.abandonAudioFocus(this)
+                        //                        mAudioManager.abandonAudioFocus(this)
                         isRequestAudioFocus = true
                     }// Pause your media player here
                 }
-            }
-
-        }, AudioManager.STREAM_MUSIC,
-                AudioManager.AUDIOFOCUS_GAIN)
+            }, AudioManager.STREAM_MUSIC,
+            AudioManager.AUDIOFOCUS_GAIN
+        )
     }
 
-    fun updateDurationPlayer() {
+    private fun updateDurationPlayer() {
         mDurationUpdateHandler.removeCallbacksAndMessages(null);
         if (longestDurationPlayer != null) {
             mDurationUpdateHandler.postDelayed(mDurationUpdateRunnable, 0)
         }
-    }
-
-    //set the song
-    fun setSong(songIndex: Int) {
-        songPosition = songIndex
     }
 
     override fun onCompletion(mp: MediaPlayer) {
@@ -447,9 +398,7 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
                 playSong(false)
             } else {
                 if (repeatType == RepeatType.NONE && songPosition == playlistItems!!.size - 1) {
-                    if (mDurationUpdateHandler != null) {
-                        mDurationUpdateHandler.removeCallbacksAndMessages(null);
-                    }
+                    mDurationUpdateHandler.removeCallbacksAndMessages(null)
                     pausePlayer()
                     if (longestDurationPlayer != null) {
                         val songFromPlayer = longestDurationPlayer!!.getSong()
@@ -466,10 +415,8 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
                     intent.putExtra(Constants.EXTRAX_PLAYLIST_IS_PLAYING, true)
                     intent.putExtra(Constants.EXTRAX_HIDDEN_CONTROLLER, true)
                     sendBroadcast(intent)
-                    if (iSongPlaying != null) {
-                        for (callback in iSongPlaying) {
-                            callback.songPlaying(-1)
-                        }
+                    for (callback in iSongPlaying) {
+                        callback.songPlaying(-1)
                     }
                 } else {
                     playNext(true)
@@ -509,10 +456,9 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
     private fun startPlayback() {
         var isPauseImmediatelyStarted = false
-        if (players != null && players.size > 0) {
+        if (players.size > 0) {
             isPauseImmediatelyStarted = players.get(0).isPauseImmediatelyStarted
         }
         for (player in players) {
@@ -529,38 +475,41 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
         //notification
         val notIntent = Intent(this, MainActivity::class.java)
         notIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        val pendInt = PendingIntent.getActivity(this, 0,
-                notIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val pendInt = PendingIntent.getActivity(
+            this, 0,
+            notIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val chanelId = "$packageName.CHANNEL_ID_FOREGROUND"
 
-        var builder = Notification.Builder(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val appName = getString(R.string.app_name)
             val description = getString(R.string.app_name)
             val nm = getSystemService(Activity.NOTIFICATION_SERVICE) as NotificationManager
-            if (nm != null) {
-                var chanelId = packageName + ".CHANNEL_ID_FOREGROUND"
-                var nChannel: NotificationChannel? = nm.getNotificationChannel(chanelId)
-                if (nChannel == null) {
-                    nChannel = NotificationChannel(packageName + ".CHANNEL_ID_FOREGROUND", appName, NotificationManager.IMPORTANCE_MIN)
-                    nChannel.description = description
-                    nm.createNotificationChannel(nChannel)
-                }
-                builder = Notification.Builder(this, chanelId)
+            var nChannel: NotificationChannel? = nm.getNotificationChannel(chanelId)
+            if (nChannel == null) {
+                nChannel = NotificationChannel(
+                    "$packageName.CHANNEL_ID_FOREGROUND",
+                    appName,
+                    NotificationManager.IMPORTANCE_MIN
+                )
+                nChannel.description = description
+                nm.createNotificationChannel(nChannel)
             }
         }
+        val builder = NotificationCompat.Builder(this, chanelId)
 
         builder.setContentIntent(pendInt)
-                .setSmallIcon(R.drawable.play)
-                .setTicker(songTitle)
-                .setOngoing(true)
-                .setContentTitle("Playing")
-                .setContentText(songTitle)
+            .setSmallIcon(R.drawable.play)
+            .setTicker(songTitle)
+            .setOngoing(true)
+            .setContentTitle("Playing")
+            .setContentText(songTitle)
         val not = builder.notification
         startForeground(NOTIFY_ID, not)
     }
 
     fun pausePlayer() {
-        if (playlistItems == null || (playlistItems != null && playlistItems!!.size == 0)) {
+        if (playlistItems == null || playlistItems!!.isEmpty()) {
             return
         }
         isPlaying = false
@@ -574,27 +523,15 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
         broadcastActionPlayler(false)
     }
 
-    fun broadcastActionPlayler(isPlay: Boolean) {
+    private fun broadcastActionPlayler(isPlay: Boolean) {
         if (playlistItems != null && playlistItems!!.isNotEmpty()
-                && songPosition > -1 && songPosition < playlistItems!!.size) {
+            && songPosition > -1 && songPosition < playlistItems!!.size
+        ) {
             val playItem = playlistItems!![songPosition]
             val intent = Intent(Constants.BROADCAST_PLAY_PLAYLIST)
             intent.putExtra(Constants.EXTRAX_PLAYLIST_ITEM_ID, playItem.id)
             intent.putExtra(Constants.EXTRAX_PLAYLIST_IS_PLAYING, isPlay)
             sendBroadcast(intent)
-        }
-    }
-
-    fun seek(position: Int) {
-        if (playlistItems == null || (playlistItems != null && playlistItems!!.size == 0)) {
-            return
-        }
-        for (player in players) {
-            try {
-                player.seekTo(position)
-            } catch (e: IllegalStateException) {
-                player.stop()
-            }
         }
     }
 
@@ -621,16 +558,14 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
     }
 
     fun changeDurationFromMain(progress: Int) {
-        if (playlistItems == null || (playlistItems != null && playlistItems!!.size == 0)) {
+        if (playlistItems == null || playlistItems!!.isEmpty()) {
             return
         }
-        if (playlistItems != null) {
-            for (player in players) {
-                val song = player.getSong()
-                if (song != null) {
-                    if (song.item.startOffset + progress < song.item.endOffset) {
-                        player.seekTo(song.item.startOffset.toInt() + progress)
-                    }
+        for (player in players) {
+            val song = player.getSong()
+            if (song != null) {
+                if (song.item.startOffset + progress < song.item.endOffset) {
+                    player.seekTo(song.item.startOffset.toInt() + progress)
                 }
             }
         }
@@ -647,8 +582,13 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
                             for (player in players) {
                                 if (player.getSong()!!.item.id == song.item.id) {
 //                                    player.setVolume(song.item.volumeLevel, song.item.volumeLevel)
-                                    var max = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                                    mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round((song.item.volumeLevel * max)), 0)
+                                    val max =
+                                        mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                                    mAudioManager.setStreamVolume(
+                                        AudioManager.STREAM_MUSIC,
+                                        Math.round((song.item.volumeLevel * max)),
+                                        0
+                                    )
                                     break
                                 }
                             }
@@ -696,7 +636,6 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
                             item.songs.remove(songItem)
 
                             var position = 0
-                            var hasPlayer: Boolean = false
                             // stop controller player of song of playing playlist item
                             for (player in players) {
                                 if (player.getSong()!!.item.id == song.item.id) {
@@ -704,7 +643,6 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
                                         player.stop()
                                     player.release()
                                     players.removeAt(position)
-                                    hasPlayer = true
                                     break
                                 }
                                 position++
@@ -748,7 +686,7 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
             playlistItems = ArrayList()
         }
         if (playlistItems!!.size > 0) {
-            if (playlistItems!!.get(0).playlistId == playlistItem.playlistId) {
+            if (playlistItems!![0].playlistId == playlistItem.playlistId) {
                 playlistItems!!.add(playlistItem)
             }
         }
@@ -759,7 +697,7 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
             playlistItems = ArrayList()
         }
         if (playlistItems!!.size > 0) {
-            if (playlistItems!!.get(0).playlistId == playlistId) {
+            if (playlistItems!![0].playlistId == playlistId) {
                 //stop all player
                 stopMusicService()
             }
@@ -796,50 +734,10 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
         return maxVolume.toFloat()
     }
 
-    private fun setCountDownTimerStart(song: PlaylistItemSongAndSong) {
-        val volumeStep = getDeviceVolume() / 5
-        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(0F), 0)
-        mCountDownTimerStart = object : CountDownTimer(5000, 1000) {
-            override fun onFinish() {
-                mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(getDeviceVolume()), 0)
-                cancelCountDownStart()
-            }
-
-            override fun onTick(p0: Long) {
-                val totalSeconds = ((5000 - p0) / 1000).toInt()
-                val volume = totalSeconds * volumeStep
-                mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(volume), 0)
-                Log.d("VOLUME", "fade in $volume")
-            }
-        }
-        mCountDownTimerStart?.start()
-    }
-
-    fun setCountDownTimerEnd(song: PlaylistItemSongAndSong) {
-        val volumeSpace = getDeviceVolume() / 5
-        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(getDeviceVolume()), 0)
-        mCountDownTimerEnd = object : CountDownTimer(5000, 1000) {
-            override fun onFinish() {
-                if (song.item.endOffset == 0L) {
-                    mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(0f), 0)
-                    cancelCountDownEnd()
-                }
-            }
-
-            override fun onTick(p0: Long) {
-                val totalSeconds = (p0 / 1000).toInt()
-                val volume = totalSeconds * volumeSpace
-                mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(volume), 0)
-                Log.d("VOLUME", "fade out $volume")
-            }
-        }
-        mCountDownTimerEnd?.start()
-    }
-
 
     //skip to previous track
     fun playPrev() {
-        if (playlistItems == null || (playlistItems != null && playlistItems!!.size == 0)) {
+        if (playlistItems == null || playlistItems!!.isEmpty()) {
             return
         }
         if (shuffle) {
@@ -870,7 +768,7 @@ class MusicService : Service(), MediaPlayer.OnPreparedListener, MediaPlayer.OnEr
 
     //skip to next
     fun playNext(autoNext: Boolean) {
-        if (playlistItems == null || (playlistItems != null && playlistItems!!.size == 0)) {
+        if (playlistItems == null || playlistItems!!.isEmpty()) {
             return
         }
         if (shuffle) {
