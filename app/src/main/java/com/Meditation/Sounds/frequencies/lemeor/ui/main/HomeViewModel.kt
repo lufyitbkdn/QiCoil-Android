@@ -4,13 +4,17 @@ import android.content.Context
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.liveData
-import com.Meditation.Sounds.frequencies.lemeor.data.model.*
+import com.Meditation.Sounds.frequencies.lemeor.data.model.Album
+import com.Meditation.Sounds.frequencies.lemeor.data.model.HomeResponse
+import com.Meditation.Sounds.frequencies.lemeor.data.model.Program
+import com.Meditation.Sounds.frequencies.lemeor.data.model.Status
+import com.Meditation.Sounds.frequencies.lemeor.data.model.Track
 import com.Meditation.Sounds.frequencies.lemeor.data.utils.Resource
 import com.Meditation.Sounds.frequencies.lemeor.data.utils.getErrorMsg
 import com.Meditation.Sounds.frequencies.lemeor.tools.PreferenceHelper
 import com.google.gson.Gson
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
@@ -41,19 +45,19 @@ class HomeViewModel(private val repository: HomeRepository) : ViewModel() {
         return repository.reportTrack(trackId, trackUrl)
     }
 
-    fun getAlbumById(id: Int): Album? {
+    suspend fun getAlbumById(id: Int): Album? {
         return repository.getAlbumById(id)
     }
 
-    fun searchAlbum(searchString: String): List<Album>? {
+    suspend fun searchAlbum(searchString: String): List<Album> {
         return repository.searchAlbum(searchString)
     }
 
-    fun searchTrack(searchString: String): List<Track>? {
+    suspend fun searchTrack(searchString: String): List<Track> {
         return repository.searchTrack(searchString)
     }
 
-    fun searchProgram(searchString: String): List<Program>? {
+    suspend fun searchProgram(searchString: String): List<Program> {
         return repository.searchProgram(searchString)
     }
 
@@ -65,13 +69,13 @@ class HomeViewModel(private val repository: HomeRepository) : ViewModel() {
                 HomeResponse::class.java
         )
 
-        GlobalScope.launch { repository.localSave(cache) }
+        CoroutineScope(Dispatchers.IO).launch { repository.localSave(cache) }
     }
 
     fun loadDataLastHomeResponse(context: Context){
         val homeResponse = PreferenceHelper.getLastHomeResponse(context)
         if (homeResponse?.tiers != null && homeResponse.tiers.isNotEmpty()) {
-            GlobalScope.launch { repository.localSave(homeResponse) }
+            CoroutineScope(Dispatchers.IO).launch { repository.localSave(homeResponse) }
         }
     }
 }

@@ -8,44 +8,44 @@ import com.Meditation.Sounds.frequencies.lemeor.data.model.Program
 @Dao
 interface ProgramDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insert(program: Program?)
+    suspend fun insert(program: Program?)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertAll(list: List<Program>?)
+    suspend fun insertAll(list: List<Program>?)
 
     @Delete
-    fun delete(program: Program?)
+    suspend fun delete(program: Program?)
 
     @Delete
-    fun deletePrograms(list: List<Program>?)
+    suspend fun deletePrograms(list: List<Program>?)
 
     @Query("DELETE FROM program")
-    fun clear()
+    suspend fun clear()
 
     @Query("SELECT * FROM program ORDER BY `order` ASC")
-    fun getPrograms() : LiveData<List<Program>>?
+    fun getPrograms() : LiveData<List<Program>>
 
     @Query("SELECT * FROM program WHERE isMy=:isMy ORDER BY `order` ASC")
-    fun getMy(isMy: Boolean) : LiveData<List<Program>>?
+    fun getMy(isMy: Boolean) : LiveData<List<Program>>
 
     @Query("SELECT * FROM program WHERE id=:id ORDER BY `order` ASC")
-    fun getProgramByIdLive(id: Int) : LiveData<Program>?
+    fun getProgramByIdLive(id: Int) : LiveData<Program>
 
     @Query("SELECT * FROM program WHERE id=:id")
-    fun getProgramById(id: Int) : Program?
+    suspend fun getProgramById(id: Int) : Program?
 
     @Query("SELECT * FROM program WHERE name=:name")
-    fun getProgramByName(name: String) : Program?
+    suspend fun getProgramByName(name: String) : Program?
 
     @Update
-    fun updateProgram(program: Program)
+    suspend fun updateProgram(program: Program)
 
     @Query("SELECT * FROM program WHERE name LIKE :searchString")
-    fun searchProgram(searchString: String): List<Program>?
+    suspend fun searchProgram(searchString: String): List<Program>
 
     @Query("SELECT * FROM program WHERE isMy=:isMy ORDER BY `order` ASC")
-    fun getData(isMy: Boolean) : List<Program>?
+    suspend fun getData(isMy: Boolean) : List<Program>
 
     @Query("UPDATE program SET isMy=:isMy WHERE id=:id")
-    fun syncPrograms(isMy: Boolean, id: Int)
+    suspend fun syncPrograms(isMy: Boolean, id: Int)
 }

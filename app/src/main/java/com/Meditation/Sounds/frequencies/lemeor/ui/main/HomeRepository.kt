@@ -8,6 +8,9 @@ import com.Meditation.Sounds.frequencies.lemeor.data.remote.ApiHelper
 import com.Meditation.Sounds.frequencies.lemeor.data.utils.performGetOperation
 import com.Meditation.Sounds.frequencies.lemeor.tools.PreferenceHelper
 import com.Meditation.Sounds.frequencies.lemeor.ui.auth.updateUnlocked
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class HomeRepository(private val apiHelper: ApiHelper, private val localData: DataBase) {
 
@@ -22,31 +25,37 @@ class HomeRepository(private val apiHelper: ApiHelper, private val localData: Da
     suspend fun reportTrack(trackId: Int, trackUrl: String): Status {
         return apiHelper.reportTrack(trackId, trackUrl)
     }
+
     fun getHome(user_id: String) = performGetOperation(
-            databaseQuery = { localData.homeDao().getHome() },
-            networkCall = { apiHelper.getHome(user_id) },
-            saveCallResult = {
+        databaseQuery = { localData.homeDao().getHome() },
+        networkCall = {
+            val data = apiHelper.getHome(user_id)
+            data
+        },
+        saveCallResult = {
+            CoroutineScope(Dispatchers.IO).launch {
                 localSave(it)
             }
+        }
     )
 
-    fun getAlbumById(id: Int): Album? {
+    suspend fun getAlbumById(id: Int): Album? {
         return localData.albumDao().getAlbumById(id)
     }
 
-    fun searchAlbum(searchString: String): List<Album>? {
+    suspend fun searchAlbum(searchString: String): List<Album>{
         return localData.albumDao().searchAlbum(searchString)
     }
 
-    fun searchTrack(searchString: String): List<Track>? {
+    suspend fun searchTrack(searchString: String): List<Track> {
         return localData.trackDao().searchTrack(searchString)
     }
 
-    fun searchProgram(searchString: String): List<Program>? {
+    suspend fun searchProgram(searchString: String): List<Program> {
         return localData.programDao().searchProgram(searchString)
     }
 
-    fun localSave(it: HomeResponse?) {
+    suspend fun localSave(it: HomeResponse?) {
         if (it?.tiers != null && it.tiers.isNotEmpty()) {
             PreferenceHelper.saveLastHomeResponse(QApplication.getInstance().applicationContext, it)
         }
@@ -64,6 +73,12 @@ class HomeRepository(private val apiHelper: ApiHelper, private val localData: Da
         syncAlbums(localData, it)
         syncTracks(localData, it)
 
-        user?.let { user -> updateUnlocked(QApplication.getInstance().applicationContext, user, true) }
+        user?.let {
+            updateUnlocked(
+                QApplication.getInstance().applicationContext,
+                it,
+                true
+            )
+        }
     }
 }

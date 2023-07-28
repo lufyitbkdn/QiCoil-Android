@@ -17,7 +17,6 @@ import com.appsflyer.AppsFlyerLib
 import kotlinx.android.synthetic.main.activity_trial.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -51,7 +50,7 @@ class TrialActivity : AppCompatActivity() {
     private fun initUI() {
         val albumDao = DataBase.getInstance(applicationContext).albumDao()
 
-        GlobalScope.launch {
+        CoroutineScope(Dispatchers.IO).launch {
             val albumList = ArrayList<Album>()
             albumDao.getAllAlbums()?.let { albumList.addAll(it) }
             var isAllPurchase = true
@@ -62,10 +61,10 @@ class TrialActivity : AppCompatActivity() {
                 }
             }
 
+            CoroutineScope(Dispatchers.Main).launch {
             if(isAllPurchase)
                 finish()
             else {
-                CoroutineScope(Dispatchers.Main).launch {
                     val albumsPagerAdapter = AlbumsPagerAdapter(supportFragmentManager, albumList)
                     purchase_container.adapter = albumsPagerAdapter
 
@@ -198,7 +197,7 @@ class TrialActivity : AppCompatActivity() {
                     // Handle the success of the consume operation.
                     Log.d("TAG_INAPP", "Update the appropriate tables/databases to grant user the items")
                     val albumDao = DataBase.getInstance(applicationContext).albumDao()
-                    GlobalScope.launch {
+                    CoroutineScope(Dispatchers.IO).launch {
                         when (mSkuDetails?.sku) {
                             QUANTUM_TIER_SUBS_ANNUAL_7_DAY_TRIAL -> {
                                 albumDao.setNewUnlockedByTierId(
@@ -215,7 +214,7 @@ class TrialActivity : AppCompatActivity() {
                     // Handle the success of the consume operation.
                     Log.d("TAG_INAPP", "Update the appropriate tables/databases to grant user the items")
                     val albumDao = DataBase.getInstance(applicationContext).albumDao()
-                    GlobalScope.launch {
+                    CoroutineScope(Dispatchers.IO).launch {
                         when (mSkuDetails?.sku) {
                             QUANTUM_TIER_SUBS_ANNUAL_7_DAY_TRIAL -> {
                                 albumDao.setNewUnlockedByTierId(

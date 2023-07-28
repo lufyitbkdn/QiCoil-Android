@@ -12,14 +12,9 @@ import com.Meditation.Sounds.frequencies.feature.album.detail.DescriptionAdapter
 import com.Meditation.Sounds.frequencies.lemeor.data.database.DataBase
 import com.Meditation.Sounds.frequencies.lemeor.data.model.Album
 import com.Meditation.Sounds.frequencies.lemeor.loadImage
-import com.Meditation.Sounds.frequencies.lemeor.ui.purchase.new_flow.AlbumsPagerAdapter
 import com.Meditation.Sounds.frequencies.lemeor.ui.purchase.new_flow.NewPurchaseActivity
-import com.bumptech.glide.Glide
-import kotlinx.android.synthetic.main.activity_new_purchase.*
-import kotlinx.android.synthetic.main.fragment_new_album_detail.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
 class AdvActivity : AppCompatActivity() {
@@ -58,22 +53,23 @@ class AdvActivity : AppCompatActivity() {
             finish()
         }
 
-        GlobalScope.launch {
+        CoroutineScope(Dispatchers.IO).launch {
             album = albumDao.getRandomAlbum(false)
-            if(album?.isUnlocked==true)
-                finish()
-            else {
-                Log.e("TEST", album.toString())
-                mDescriptionAdapter =
+            CoroutineScope(Dispatchers.Main).launch {
+                if (album?.isUnlocked == true)
+                    finish()
+                else {
+                    Log.e("TEST", album.toString())
+                    mDescriptionAdapter =
                         album?.descriptions?.let { DescriptionAdapter(this@AdvActivity, it) }
-                album_description_recycler?.adapter = mDescriptionAdapter
-                adv_tital?.text = album?.name
+                    album_description_recycler?.adapter = mDescriptionAdapter
+                    adv_tital?.text = album?.name
 
-                CoroutineScope(Dispatchers.Main).launch {
+
                     loadImage(
-                            this@AdvActivity,
-                            album_image!!,
-                            album!!
+                        this@AdvActivity,
+                        album_image!!,
+                        album!!
                     )
                 }
             }
@@ -81,5 +77,5 @@ class AdvActivity : AppCompatActivity() {
 
     }
 
-   
+
 }

@@ -5,11 +5,11 @@ import com.Meditation.Sounds.frequencies.BuildConfig
 import com.Meditation.Sounds.frequencies.lemeor.data.database.DataBase
 import com.Meditation.Sounds.frequencies.lemeor.data.model.*
 
-fun syncTiers(db: DataBase, response: HomeResponse?) {
+suspend fun syncTiers(db: DataBase, response: HomeResponse?) {
     Log.d("LOG", "syncTiers")
 
-    val localData = db.tierDao().getData() as ArrayList
-    val responseData = response?.tiers as ArrayList
+    val localData = db.tierDao().getData().toMutableList()
+    val responseData = (response?.tiers?: listOf()).toMutableList()
 
     if (localData.isNotEmpty()) {
         Log.d("LOG", "Local bd is not empty")
@@ -60,9 +60,9 @@ fun syncTiers(db: DataBase, response: HomeResponse?) {
     }
 }
 
-fun syncCategories(db: DataBase, response: HomeResponse?) {
-    val localData = db.categoryDao().getData() as ArrayList
-    val responseData = response?.categories as ArrayList
+suspend fun syncCategories(db: DataBase, response: HomeResponse?) {
+    val localData = db.categoryDao().getData().toMutableList()
+    val responseData = (response?.categories?: listOf()).toMutableList()
 
     if (localData.isNotEmpty()) {
         responseData.forEach { resp ->
@@ -98,12 +98,12 @@ fun syncCategories(db: DataBase, response: HomeResponse?) {
     }
 }
 
-fun syncAlbums(db: DataBase, response: HomeResponse?) {
-    val localData = db.albumDao().getData() as ArrayList
-    val responseData = response?.albums as ArrayList
+suspend fun syncAlbums(db: DataBase, response: HomeResponse?) {
+    val localData = db.albumDao().getData().toMutableList()
+    val responseData = (response?.albums?: listOf()).toMutableList()
 
     //save tiers to albums
-    response.categories.forEach { category ->
+    response?.categories?.forEach { category ->
         responseData.forEach { album ->
             if (album.category_id == category.id) {
                 album.tier_id = category.tier_id
@@ -164,8 +164,8 @@ fun syncAlbums(db: DataBase, response: HomeResponse?) {
     }
 }
 
-fun syncTracks(db: DataBase, response: HomeResponse?) {
-    val localData = db.trackDao().getData() as ArrayList
+suspend fun syncTracks(db: DataBase, response: HomeResponse?) {
+    val localData = db.trackDao().getData().toMutableList()
     val responseData: ArrayList<Track> = arrayListOf()
 
     response?.albums?.forEach { album ->
@@ -228,10 +228,10 @@ fun syncTracks(db: DataBase, response: HomeResponse?) {
     }
 }
 
-fun syncPrograms(db: DataBase, response: HomeResponse?) {
-    val localData = db.programDao().getData(false) as ArrayList
-    val delete = db.programDao().getData(false) as ArrayList
-    val responseData = response?.programs as ArrayList
+suspend fun syncPrograms(db: DataBase, response: HomeResponse?) {
+    val localData = db.programDao().getData(false) .toMutableList()
+    val delete = db.programDao().getData(false) .toMutableList()
+    val responseData = (response?.programs?: listOf()).toMutableList()
 
     if (localData.isNotEmpty()) {
         val itrResp = responseData.iterator()
@@ -251,16 +251,16 @@ fun syncPrograms(db: DataBase, response: HomeResponse?) {
         db.programDao().insertAll(responseData)
         db.programDao().deletePrograms(delete)
     } else {
-        db.programDao().insertAll(response.programs)
+        db.programDao().insertAll(responseData)
         db.programDao().insert(Program(0, FAVORITES, 0, 0, arrayListOf(), isMy = true))
         db.programDao().insert(Program(0, "Playlist 1", 0, 0, arrayListOf(), isMy = true))
     }
 }
 
-fun syncPlaylists(db: DataBase, response: HomeResponse?) {
-    val localData = db.playlistDao().getData() as ArrayList
-    val delete = db.playlistDao().getData() as ArrayList
-    val responseData = response?.playlists as ArrayList
+suspend fun syncPlaylists(db: DataBase, response: HomeResponse?) {
+    val localData = db.playlistDao().getData().toMutableList()
+    val delete = db.playlistDao().getData().toMutableList()
+    val responseData = (response?.playlists ?: listOf()).toMutableList()
 
     if (localData.isNotEmpty()) {
         val itrResp = responseData.iterator()
@@ -279,14 +279,14 @@ fun syncPlaylists(db: DataBase, response: HomeResponse?) {
         db.playlistDao().insertAll(responseData)
         db.playlistDao().deletePlaylists(delete)
     } else {
-        db.playlistDao().insertAll(response.playlists)
+        db.playlistDao().insertAll(responseData)
     }
 }
 
-fun syncTags(db: DataBase, response: HomeResponse?) {
-    val localData = db.tagDao().getData() as ArrayList
-    val delete = db.tagDao().getData() as ArrayList
-    val responseData = response?.tags as ArrayList
+suspend fun syncTags(db: DataBase, response: HomeResponse?) {
+    val localData = db.tagDao().getData().toMutableList()
+    val delete = db.tagDao().getData().toMutableList()
+    val responseData = (response?.tags?: listOf()) .toMutableList()
 
     if (localData.isNotEmpty()) {
         val itrResp = responseData.iterator()
@@ -305,19 +305,11 @@ fun syncTags(db: DataBase, response: HomeResponse?) {
         db.tagDao().insertAll(responseData)
         db.tagDao().deleteTags(delete)
     } else {
-        db.tagDao().insertAll(response.tags)
+        db.tagDao().insertAll(responseData)
     }
 }
 
 fun checkUnlocked(isFree: Int): Boolean {
     return isFree == 1
-}
-
-fun checkTest(responseIsFree: Int, localIsFree: Boolean): Boolean {
-    return when {
-        localIsFree -> { true }
-        responseIsFree == 1 -> { true }
-        else -> { false }
-    }
 }
 

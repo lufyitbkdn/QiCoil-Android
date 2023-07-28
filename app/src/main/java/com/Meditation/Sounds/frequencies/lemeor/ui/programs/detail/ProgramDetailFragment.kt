@@ -51,7 +51,6 @@ import kotlinx.android.synthetic.main.fragment_program_detail.program_time
 import kotlinx.android.synthetic.main.fragment_program_detail.program_tracks_recycler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
@@ -77,7 +76,7 @@ class ProgramDetailFragment : Fragment() {
         if (event == DownloadService.DOWNLOAD_FINISH) {
             val tracks: ArrayList<Track> = ArrayList()
 
-            GlobalScope.launch {
+            CoroutineScope(Dispatchers.IO).launch {
                 program?.records?.forEach {
                     mViewModel.getTrackById(it)?.let { track ->
                         tracks.add(track)
@@ -197,14 +196,12 @@ class ProgramDetailFragment : Fragment() {
         program_tracks_recycler.adapter = mTrackAdapter
 
         val dao = DataBase.getInstance(requireContext()).albumDao()
-        GlobalScope.launch {
+        CoroutineScope(Dispatchers.IO).launch {
             program.records.forEach {
                 mViewModel.getTrackById(it)?.let { track ->
                     tracks.add(track)
                 }
             }
-            program_time.text =
-                getString(R.string.total_time, getConvertedTime((tracks.size * 300000).toLong()))
             tracks.forEach {
                 val album = dao.getAlbumById(it.albumId)
                 it.album = album
@@ -212,6 +209,8 @@ class ProgramDetailFragment : Fragment() {
 
 
             CoroutineScope(Dispatchers.Main).launch {
+                program_time.text =
+                    getString(R.string.total_time, getConvertedTime((tracks.size * 300000).toLong()))
                 mTracks = tracks
                 mTrackAdapter?.setData(tracks)
 
@@ -242,7 +241,7 @@ class ProgramDetailFragment : Fragment() {
             val list = ArrayList<Track>()
 
             val dao = DataBase.getInstance(requireContext()).albumDao()
-            GlobalScope.launch {
+            CoroutineScope(Dispatchers.IO).launch {
                 tracks.forEach { t ->
                     val album = dao.getAlbumById(t.albumId)
                     t.album = album
@@ -296,7 +295,7 @@ class ProgramDetailFragment : Fragment() {
         val data: ArrayList<MusicRepository.Track> = ArrayList()
         val db = DataBase.getInstance(requireContext())
 
-        GlobalScope.launch {
+        CoroutineScope(Dispatchers.IO).launch {
             tracks.forEach { t ->
                 val file =
                     File(getSaveDir(requireContext(), t.filename, t.album?.audio_folder ?: ""))
@@ -350,7 +349,7 @@ class ProgramDetailFragment : Fragment() {
             isPlayProgram = false
             activity.hidePlayerUI()
 
-            GlobalScope.launch {
+            CoroutineScope(Dispatchers.IO).launch {
                 val list = program?.records as MutableList<Int>
 
                 when {
@@ -401,7 +400,7 @@ class ProgramDetailFragment : Fragment() {
         }
     }
 
-    private fun moveTrack(list: MutableList<Int>, isMoveUp: Boolean, programDao: ProgramDao) {
+    private suspend fun moveTrack(list: MutableList<Int>, isMoveUp: Boolean, programDao: ProgramDao) {
         val positionFrom = positionFor!!
         val positionTo = if (isMoveUp) {
             positionFor!! - 1

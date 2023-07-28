@@ -1,5 +1,6 @@
 package com.Meditation.Sounds.frequencies.lemeor.ui.purchase
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -25,6 +26,8 @@ import com.Meditation.Sounds.frequencies.lemeor.tools.PreferenceHelper.preferenc
 import com.Meditation.Sounds.frequencies.utils.Constants
 import com.android.billingclient.api.*
 import kotlinx.android.synthetic.main.activity_flash_sale.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.util.*
@@ -131,6 +134,7 @@ class FlashSaleActivity : AppCompatActivity(), FlashSale.FlashSaleScreenInterfac
         })
     }
 
+    @SuppressLint("SetTextI18n")
     private fun queryAvailableProducts() {
         val skuList = ArrayList<String>()
         skuList.add(Constants.SKU_RIFE_YEARLY_FLASHSALE)
@@ -147,7 +151,7 @@ class FlashSaleActivity : AppCompatActivity(), FlashSale.FlashSaleScreenInterfac
                 mSkuDetails = skuDetailsList[index - 1]
                 mTvPriceFS.text = mSkuDetails?.price
                 val d = mSkuDetails?.priceAmountMicros?.div(1000000.0)?.times(2)
-                mTvPriceFrom.text = d.toString() + " " + mSkuDetails?.priceCurrencyCode
+                mTvPriceFrom.text = "$d ${mSkuDetails?.priceCurrencyCode}"
             }
         }
     }
@@ -160,10 +164,6 @@ class FlashSaleActivity : AppCompatActivity(), FlashSale.FlashSaleScreenInterfac
                     for (purchase in purchases) {
                         handleConsumedPurchases(purchase)
                     }
-                } else if (billingResult.responseCode == BillingClient.BillingResponseCode.USER_CANCELED) {
-                    // Handle an error caused by a user cancelling the purchase flow.
-                } else {
-                    // Handle any other error codes.
                 }
             }
 
@@ -200,12 +200,11 @@ class FlashSaleActivity : AppCompatActivity(), FlashSale.FlashSaleScreenInterfac
                         return@consumeAsync
                     }
 
-                    GlobalScope.launch {
+                    CoroutineScope(Dispatchers.IO).launch {
                         categoryDao.updatePurchaseStatus(true, categoryId)
                         albumDao.setUnlockedStatusByCategoryId(true, categoryId, false)
 
-                        val albums = albumDao.getUnlockedAlbums(true)
-                        albums?.forEach { a->
+                        albumDao.getUnlockedAlbums(true).forEach { a->
                             a.tracks.forEach { t->
                                 trackDao.setTrackUnlocked(true, t.id)
                             }

@@ -171,7 +171,7 @@ class DownloaderActivity : AppCompatActivity() {
                 (download.completed).coerceAtMost(download.total),
                 download.total
             )
-
+//        mDownloaderAdapter.notifyDataSetChanged();
         mDownloaderAdapter.data.firstOrNull {
             download.tag == it.id.toString()
         }?.let {

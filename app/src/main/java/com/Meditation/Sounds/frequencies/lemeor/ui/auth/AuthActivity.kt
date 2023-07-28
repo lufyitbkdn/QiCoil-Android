@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
-import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
@@ -14,7 +13,6 @@ import com.Meditation.Sounds.frequencies.R
 import com.Meditation.Sounds.frequencies.lemeor.data.api.ApiConfig.getPassResetUrl
 import com.Meditation.Sounds.frequencies.lemeor.data.api.RetrofitBuilder
 import com.Meditation.Sounds.frequencies.lemeor.data.database.DataBase
-import com.Meditation.Sounds.frequencies.lemeor.data.model.Album
 import com.Meditation.Sounds.frequencies.lemeor.data.model.AuthResponse
 import com.Meditation.Sounds.frequencies.lemeor.data.remote.ApiHelper
 import com.Meditation.Sounds.frequencies.lemeor.data.utils.Resource
@@ -24,7 +22,6 @@ import com.Meditation.Sounds.frequencies.lemeor.tools.PreferenceHelper.isLogged
 import com.Meditation.Sounds.frequencies.lemeor.tools.PreferenceHelper.preference
 import com.Meditation.Sounds.frequencies.lemeor.tools.PreferenceHelper.saveUser
 import com.Meditation.Sounds.frequencies.lemeor.tools.PreferenceHelper.token
-import com.Meditation.Sounds.frequencies.lemeor.tools.player.PlayerShuffle
 import com.Meditation.Sounds.frequencies.lemeor.ui.TrialActivity
 import com.Meditation.Sounds.frequencies.lemeor.ui.auth.LoginFragment.OnLoginListener
 import com.Meditation.Sounds.frequencies.lemeor.ui.auth.RegistrationFragment.OnRegistrationListener
@@ -32,7 +29,8 @@ import com.Meditation.Sounds.frequencies.models.event.SyncDataEvent
 import com.Meditation.Sounds.frequencies.utils.Constants
 import com.appsflyer.AFInAppEventParameterName
 import com.appsflyer.AppsFlyerLib
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.greenrobot.eventbus.EventBus
 
@@ -40,7 +38,10 @@ class AuthActivity : AppCompatActivity(), OnLoginListener, OnRegistrationListene
 
     private lateinit var mViewModel: AuthViewModel
 
-    override fun onBackPressed() {}
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,7 +89,7 @@ class AuthActivity : AppCompatActivity(), OnLoginListener, OnRegistrationListene
         val intent = Intent()
         setResult(RESULT_OK, intent)
         if (!BuildConfig.IS_FREE) {
-            GlobalScope.launch {
+            CoroutineScope(Dispatchers.IO).launch {
                 val albumDao = DataBase.getInstance(applicationContext).albumDao()
 
                 albumDao.getAllAlbums()?.find { !it.isUnlocked }?.let {

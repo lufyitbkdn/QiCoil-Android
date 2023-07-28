@@ -10,7 +10,7 @@ class ProgramDetailRepository(private val localData: DataBase) {
         return localData.programDao().getProgramByIdLive(id)
     }
 
-    fun getTrackById(id: Int): Track? {
+    suspend fun getTrackById(id: Int): Track? {
         return localData.trackDao().getTrackById(id)
     }
 }

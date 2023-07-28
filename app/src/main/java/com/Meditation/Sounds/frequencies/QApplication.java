@@ -35,6 +35,8 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 public class QApplication extends MultiDexApplication implements ApiListener, Configuration.Provider {
     private static QApplication INSTANCE;
@@ -184,10 +186,14 @@ public class QApplication extends MultiDexApplication implements ApiListener, Co
         if (BuildConfig.DEBUG) {
             return new Configuration.Builder()
                     .setMinimumLoggingLevel(android.util.Log.DEBUG)
+                    .setExecutor(Executors.newSingleThreadExecutor())
+                    .setTaskExecutor(Executors.newSingleThreadExecutor())
                     .build();
         } else {
             return new Configuration.Builder()
                     .setMinimumLoggingLevel(android.util.Log.ERROR)
+                    .setExecutor(Executors.newSingleThreadExecutor())
+                    .setTaskExecutor(Executors.newSingleThreadExecutor())
                     .build();
         }
     }

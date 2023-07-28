@@ -2,8 +2,11 @@ package com.Meditation.Sounds.frequencies.lemeor.tools.downloader
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.net.ConnectivityManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -20,10 +23,10 @@ import com.Meditation.Sounds.frequencies.lemeor.data.database.dao.TrackDao
 import com.Meditation.Sounds.frequencies.lemeor.data.model.Track
 import com.Meditation.Sounds.frequencies.lemeor.getSaveDir
 import com.Meditation.Sounds.frequencies.lemeor.getTrackUrl
+import com.Meditation.Sounds.frequencies.utils.Utils
 import com.Meditation.Sounds.frequencies.work.DownLoadCourseAudioWorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.greenrobot.eventbus.EventBus
 import java.io.File
@@ -52,7 +55,7 @@ class DownloadService : LifecycleService() {
     var tracks = mutableListOf<Track>()
         private set
 
-    var downloadErrorTracks = ArrayList<Int>()
+    var downloadErrorTracks = HashSet<Int>()
         private set
 
     val fileProgressMap: HashMap<Int, Int> = HashMap()
@@ -61,10 +64,32 @@ class DownloadService : LifecycleService() {
     // Binder given to clients.
     private val binder = DownloadServiceBinder()
 
+    private var hasNetwork = true
+    private var isDownloading = false
+
+    private val networkChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent?) {
+            val isNetworkAvailable = Utils.isConnectedToNetwork(context)
+            if (hasNetwork != isNetworkAvailable) {
+                hasNetwork = isNetworkAvailable
+                if (hasNetwork) {
+                    downloadErrorTracks.clear()
+                    downloadNext(true)
+                }
+            }
+        }
+
+    }
+
     override fun onCreate() {
         super.onCreate()
         WorkManager.getInstance(application).cancelAllWorkByTag(DownLoadCourseAudioWorkManager.TAG)
         trackDao = DataBase.getInstance(applicationContext).trackDao()
+        hasNetwork = Utils.isConnectedToNetwork(this)
+        registerReceiver(
+            networkChangeReceiver,
+            IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -139,6 +164,7 @@ class DownloadService : LifecycleService() {
     override fun onDestroy() {
         downloadErrorTracks.clear()
         WorkManager.getInstance(application).cancelAllWorkByTag(DownLoadCourseAudioWorkManager.TAG)
+        unregisterReceiver(networkChangeReceiver)
         super.onDestroy()
     }
 
@@ -188,11 +214,29 @@ class DownloadService : LifecycleService() {
                 ).exists()
             ) {
                 fileProgressMap[it.id] = 100
-            } else {
-                val request = DownLoadCourseAudioWorkManager.start(applicationContext, it, it.album)
-                observeWorker(request)
             }
         }
+        if (!isDownloading) {
+            downloadNext()
+        }
+    }
+
+    private fun downloadNext(redownload: Boolean = false) {
+        WorkManager.getInstance(application).cancelAllWorkByTag(DownLoadCourseAudioWorkManager.TAG)
+        tracks.firstOrNull {
+            (fileProgressMap[it.id] ?: 0) < 100 && (redownload || !downloadErrorTracks.contains(
+                it.id
+            ))
+        }?.let {
+            isDownloading = true
+            downloadErrorTracks.remove(it.id)
+            fileProgressMap[it.id] = 0
+            val request = DownLoadCourseAudioWorkManager.start(applicationContext, it, it.album)
+            observeWorker(request)
+        } ?: run {
+            isDownloading = false
+        }
+
     }
 
     private fun observeWorker(request: OneTimeWorkRequest) {
@@ -215,24 +259,25 @@ class DownloadService : LifecycleService() {
                                 tracks.size
                             )
                         )
+                        downloadNext(false)
                     } else if (workInfo.state == WorkInfo.State.FAILED) {
                         workInfo.tags.firstOrNull { it.startsWith("track") }?.let { tag ->
                             val trackId = tag.replace("track_", "").toInt()
-                            if (!downloadErrorTracks.any { trackId == it }) {
-                                tracks.firstOrNull { trackId == it.id }?.let {
-                                    downloadErrorTracks.add(it.id)
-                                    EventBus.getDefault()
-                                        .post(
-                                            DownloadTrackErrorEvent(
-                                                trackId,
-                                                getTrackUrl(it.album, it.filename)
-                                            )
+//                            if (!downloadErrorTracks.any { trackId == it }) {
+                            tracks.firstOrNull { trackId == it.id }?.let {
+                                downloadErrorTracks.add(it.id)
+                                EventBus.getDefault()
+                                    .post(
+                                        DownloadTrackErrorEvent(
+                                            trackId,
+                                            getTrackUrl(it.album, it.filename)
                                         )
-                                }
+                                    )
+//                                }
                             }
                             checkDoneDownloaded()
                         }
-
+                        downloadNext()
                     } else if (workInfo != null) {
                         val total =
                             workInfo.progress.getLong(DownLoadCourseAudioWorkManager.TOTAL, 0L)

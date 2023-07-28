@@ -8,7 +8,7 @@ import com.Meditation.Sounds.frequencies.lemeor.data.model.Track
 
 class NewProgramViewModel(private val repository: ProgramRepository) : ViewModel() {
 
-    fun getPrograms(isMy: Boolean) : LiveData<List<Program>>? {
+    fun getPrograms(isMy: Boolean) : LiveData<List<Program>> {
         return if (isMy) {
             repository.getMy()
         } else {
@@ -16,19 +16,19 @@ class NewProgramViewModel(private val repository: ProgramRepository) : ViewModel
         }
     }
 
-    fun insert(program: Program?) {
+    suspend fun insert(program: Program?) {
         repository.insert(program)
     }
 
-    fun delete(program: Program?) {
+    suspend fun delete(program: Program?) {
         repository.delete(program)
     }
 
-    fun getTrackById(id: Int): Track? {
+    suspend fun getTrackById(id: Int): Track? {
         return repository.getTrackById(id)
     }
 
-    fun getAlbumById(id: Int): Album? {
+    suspend fun getAlbumById(id: Int): Album? {
         return repository.getAlbumById(id)
     }
 }

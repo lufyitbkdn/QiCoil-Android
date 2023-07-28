@@ -48,6 +48,8 @@ import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.PurchasesResponseListener
 import kotlinx.android.synthetic.main.fragment_new_options.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
@@ -360,14 +362,16 @@ class NewOptionsFragment : Fragment() {
 
     private fun clearData() {
         val database = DataBase.getInstance(requireContext())
-        database.homeDao().clear()
-        database.tierDao().clear()
-        database.categoryDao().clear()
-        database.tagDao().clear()
-        database.albumDao().clear()
-        database.trackDao().clear()
-        database.programDao().clear()
-        database.playlistDao().clear()
+        CoroutineScope(Dispatchers.IO).launch {
+            database.homeDao().clear()
+            database.tierDao().clear()
+            database.categoryDao().clear()
+            database.tagDao().clear()
+            database.albumDao().clear()
+            database.trackDao().clear()
+            database.programDao().clear()
+            database.playlistDao().clear()
+        }
     }
 
     private fun onLogoutClick() {

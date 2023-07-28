@@ -10,45 +10,29 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.GridLayoutManager
 import com.Meditation.Sounds.frequencies.R
-import com.Meditation.Sounds.frequencies.feature.base.BaseActivity
-import com.Meditation.Sounds.frequencies.lemeor.data.api.ApiConfig
 import com.Meditation.Sounds.frequencies.lemeor.data.api.RetrofitBuilder
 import com.Meditation.Sounds.frequencies.lemeor.data.database.DataBase
 import com.Meditation.Sounds.frequencies.lemeor.data.model.Album
 import com.Meditation.Sounds.frequencies.lemeor.data.remote.ApiHelper
 import com.Meditation.Sounds.frequencies.lemeor.data.utils.Resource
 import com.Meditation.Sounds.frequencies.lemeor.data.utils.ViewModelFactory
-import com.Meditation.Sounds.frequencies.lemeor.tools.HudHelper
 import com.Meditation.Sounds.frequencies.lemeor.tools.PreferenceHelper
 import com.Meditation.Sounds.frequencies.lemeor.ui.purchase.new_flow.NewPurchaseActivity
 import com.Meditation.Sounds.frequencies.utils.Utils
 import com.Meditation.Sounds.frequencies.views.ItemOffsetDecoration
-import com.android.volley.Request
-import com.android.volley.toolbox.JsonObjectRequest
-import com.android.volley.toolbox.Volley
-import com.appsflyer.AFInAppEventParameterName
-import com.appsflyer.AppsFlyerLib
 import com.facebook.CallbackManager
 import com.facebook.FacebookCallback
 import com.facebook.FacebookException
 import com.facebook.share.Sharer
-import com.facebook.share.model.ShareLinkContent
 import com.facebook.share.widget.ShareDialog
-import kotlinx.android.synthetic.main.fragment_albums_category.*
-import kotlinx.coroutines.GlobalScope
+import kotlinx.android.synthetic.main.fragment_albums_category.albums_recycler_view
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.OkHttpClient
-import org.json.JSONException
-import org.json.JSONObject
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 
 class AlbumsRecyclerFragment : Fragment() {
@@ -262,7 +246,7 @@ class AlbumsRecyclerFragment : Fragment() {
 
     fun unlockAlbum(album: Album) {
         val albumDao = DataBase.getInstance(requireContext()).albumDao()
-        GlobalScope.launch {
+        CoroutineScope(Dispatchers.IO).launch {
             albumDao.setNewUnlockedById(true, album.id)
         }
 

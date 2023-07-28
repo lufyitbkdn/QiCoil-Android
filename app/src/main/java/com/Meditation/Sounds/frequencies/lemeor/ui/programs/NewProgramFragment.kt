@@ -39,11 +39,13 @@ import kotlinx.coroutines.launch
 class NewProgramFragment : Fragment() {
 
     private lateinit var mViewModel: NewProgramViewModel
-    private var mProgramAdapter: ProgramAdapter? = null
+    private var mProgramAdapter: ProgramAdapter = ProgramAdapter()
     private var mListProgram = ArrayList<Program>()
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?,
-                              savedInstanceState: Bundle?): View? {
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
         return inflater.inflate(R.layout.fragment_new_program, container, false)
     }
 
@@ -52,12 +54,12 @@ class NewProgramFragment : Fragment() {
 
         init()
 
-        mViewModel.getPrograms(isTrackAdd)?.observe(viewLifecycleOwner, {
+        mViewModel.getPrograms(isTrackAdd).observe(viewLifecycleOwner) {
             CoroutineScope(Dispatchers.IO).launch {
                 val data = checkUnlocked(it)
-                CoroutineScope(Dispatchers.Main).launch { mProgramAdapter!!.setData(data) }
+                CoroutineScope(Dispatchers.Main).launch { mProgramAdapter.setData(data) }
             }
-        })
+        }
 
         view?.isFocusableInTouchMode = true
         view?.requestFocus()
@@ -69,24 +71,25 @@ class NewProgramFragment : Fragment() {
         }
     }
 
-    private fun checkUnlocked(programList: List<Program>) : List<Program> {
+    private suspend fun checkUnlocked(programList: List<Program>): List<Program> {
         //todo remake this(some freezing?)
-        programList.forEach { program->
-            if (program.isMy) { program.isUnlocked = true }
-            else {
+        programList.forEach { program ->
+            if (program.isMy) {
+                program.isUnlocked = true
+            } else {
                 val tracks: ArrayList<Track> = ArrayList()
 
-                program.records.forEach { r->
+                program.records.forEach { r ->
                     mViewModel.getTrackById(r)?.let { track -> tracks.add(track) }
                 }
 
                 var isUnlocked = true
 
-                tracks.forEach { t->
+                tracks.forEach { t ->
 
-                     val temp_album = mViewModel.getAlbumById(t.albumId);
+                    val temp_album = mViewModel.getAlbumById(t.albumId);
 
-                    if (temp_album?.isUnlocked==false) {
+                    if (temp_album?.isUnlocked == false) {
                         isUnlocked = false
                     }
                 }
@@ -98,10 +101,19 @@ class NewProgramFragment : Fragment() {
 
     private fun onBackPressed() {
         parentFragmentManager
-                .beginTransaction()
-                .setCustomAnimations(R.anim.trans_left_to_right_in, R.anim.trans_left_to_right_out, R.anim.trans_right_to_left_in, R.anim.trans_right_to_left_out)
-                .replace(R.id.nav_host_fragment, NewAlbumDetailFragment.newInstance(albumIdBackProgram!!), NewAlbumDetailFragment().javaClass.simpleName)
-                .commit()
+            .beginTransaction()
+            .setCustomAnimations(
+                R.anim.trans_left_to_right_in,
+                R.anim.trans_left_to_right_out,
+                R.anim.trans_right_to_left_in,
+                R.anim.trans_right_to_left_out
+            )
+            .replace(
+                R.id.nav_host_fragment,
+                NewAlbumDetailFragment.newInstance(albumIdBackProgram!!),
+                NewAlbumDetailFragment().javaClass.simpleName
+            )
+            .commit()
     }
 
     fun init() {
@@ -115,10 +127,12 @@ class NewProgramFragment : Fragment() {
 
         program_back.setOnClickListener { onBackPressed() }
 
-        mViewModel = ViewModelProvider(this,
-                ViewModelFactory(
-                        ApiHelper(RetrofitBuilder(requireContext()).apiService),
-                        DataBase.getInstance(requireContext()))
+        mViewModel = ViewModelProvider(
+            this,
+            ViewModelFactory(
+                ApiHelper(RetrofitBuilder(requireContext()).apiService),
+                DataBase.getInstance(requireContext())
+            )
         ).get(NewProgramViewModel::class.java)
 
         program_create_new.setOnClickListener {
@@ -131,7 +145,18 @@ class NewProgramFragment : Fragment() {
             val btnAdd: Button = dialogView.findViewById<View>(R.id.btnSubmit) as Button
 
             btnAdd.setOnClickListener {
-                GlobalScope.launch { mViewModel.insert(Program(0, programName.text.toString(), 0, 0, ArrayList(), isMy = true)) }
+                CoroutineScope(Dispatchers.IO).launch {
+                    mViewModel.insert(
+                        Program(
+                            0,
+                            programName.text.toString(),
+                            0,
+                            0,
+                            ArrayList(),
+                            isMy = true
+                        )
+                    )
+                }
                 dialogBuilder.dismiss()
             }
 
@@ -139,16 +164,14 @@ class NewProgramFragment : Fragment() {
             dialogBuilder.show()
         }
 
-        mProgramAdapter = ProgramAdapter(requireContext(), mListProgram)
-
-        mProgramAdapter?.setOnClickListener(object : ProgramAdapter.Listener {
+        mProgramAdapter.setOnClickListener(object : ProgramAdapter.Listener {
             override fun onClickItem(program: Program, i: Int) {
                 if (program.isUnlocked) {
                     if (isTrackAdd && trackIdForProgram != -1) {
                         val db = DataBase.getInstance(requireContext())
                         val programDao = db.programDao()
 
-                        GlobalScope.launch {
+                        CoroutineScope(Dispatchers.IO).launch {
                             val p = programDao.getProgramById(program.id)
                             p?.records?.add(trackIdForProgram!!)
                             p?.let { it1 -> programDao.updateProgram(it1) }
@@ -156,35 +179,62 @@ class NewProgramFragment : Fragment() {
                     }
 
                     parentFragmentManager
-                            .beginTransaction()
-                            .setCustomAnimations(R.anim.trans_right_to_left_in, R.anim.trans_right_to_left_out, R.anim.trans_left_to_right_in, R.anim.trans_left_to_right_out)
-                            .replace(R.id.nav_host_fragment, ProgramDetailFragment.newInstance(program.id), ProgramDetailFragment().javaClass.simpleName)
-                            .commit()
+                        .beginTransaction()
+                        .setCustomAnimations(
+                            R.anim.trans_right_to_left_in,
+                            R.anim.trans_right_to_left_out,
+                            R.anim.trans_left_to_right_in,
+                            R.anim.trans_left_to_right_out
+                        )
+                        .replace(
+                            R.id.nav_host_fragment,
+                            ProgramDetailFragment.newInstance(program.id),
+                            ProgramDetailFragment().javaClass.simpleName
+                        )
+                        .commit()
                 } else {
                     var album: Album? = null
                     val tracks: ArrayList<Track> = ArrayList()
-
-                    program.records.forEach { r->
-                        mViewModel.getTrackById(r)?.let { track -> tracks.add(track) }
-                    }
-                    tracks.forEach { t->
-                        val temp_album = mViewModel.getAlbumById(t.albumId);
-                        if (temp_album?.isUnlocked==false && album == null) {
-                            album = temp_album
-                            startActivity(NewPurchaseActivity.newIntent(requireContext(), temp_album.category_id, temp_album.tier_id, temp_album.id))
+                    CoroutineScope(Dispatchers.IO).launch {
+                        program.records.forEach { r ->
+                            mViewModel.getTrackById(r)?.let { track -> tracks.add(track) }
+                        }
+                        tracks.forEach { t ->
+                            val temp_album = mViewModel.getAlbumById(t.albumId);
+                            if (temp_album?.isUnlocked == false && album == null) {
+                                album = temp_album
+                                CoroutineScope(Dispatchers.Main).launch {
+                                    startActivity(
+                                        NewPurchaseActivity.newIntent(
+                                            requireContext(),
+                                            temp_album.category_id,
+                                            temp_album.tier_id,
+                                            temp_album.id
+                                        )
+                                    )
+                                }
+                            }
                         }
                     }
+
                 }
             }
 
             override fun onDeleteItem(program: Program, i: Int) {
-                val alertDialog = AlertMessageDialog(requireContext(), object : AlertMessageDialog.IOnSubmitListener {
-                    override fun submit() {
-                        GlobalScope.launch { mViewModel.delete(program) }
-                        Toast.makeText(requireContext(), requireContext().getString(R.string.txt_delete_playlist_name_success), Toast.LENGTH_SHORT).show()
-                    }
-                    override fun cancel() {}
-                })
+                val alertDialog = AlertMessageDialog(
+                    requireContext(),
+                    object : AlertMessageDialog.IOnSubmitListener {
+                        override fun submit() {
+                            CoroutineScope(Dispatchers.IO).launch { mViewModel.delete(program) }
+                            Toast.makeText(
+                                requireContext(),
+                                requireContext().getString(R.string.txt_delete_playlist_name_success),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        override fun cancel() {}
+                    })
                 alertDialog.show()
                 alertDialog.setWarningMessage(getString(R.string.txt_warning_delete_playlist))
             }

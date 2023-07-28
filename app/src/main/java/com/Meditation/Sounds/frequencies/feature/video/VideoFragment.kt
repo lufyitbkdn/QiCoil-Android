@@ -47,14 +47,20 @@ class VideoFragment : BaseFragment(), YouTubePlayer.OnInitializedListener {
 
         val dao = DataBase.getInstance(requireContext()).homeDao()
 
-        dao.getHome().observe(viewLifecycleOwner, {
+        dao.getHome().observe(viewLifecycleOwner) {
             mPlaylistAdapter?.setData(it.playlists)
-            getJsonPlaylist(getString(R.string.video_url, it.playlists[0].youtube_id, API_KEY +Constants.API_KEY))
-        })
+            getJsonPlaylist(
+                getString(
+                    R.string.video_url,
+                    it.playlists[0].youtube_id,
+                    API_KEY + Constants.API_KEY
+                )
+            )
+        }
 
         val mediaController = MediaController(mContext)
         mediaController.setAnchorView(mvideoView)
-        mvideoView.setMediaController(mediaController)
+        mvideoView?.setMediaController(mediaController)
 
         if (Utils.isConnectedToNetwork(mContext)){
            // yt_pv.initialize(API_KEY, this)
@@ -63,9 +69,9 @@ class VideoFragment : BaseFragment(), YouTubePlayer.OnInitializedListener {
             if (mListVideo.isNotEmpty()) {
                 val uri:Uri = parse(mListVideo[0].videoId)
                 //Setting MediaController and URI, then starting the videoView
-                mvideoView.setVideoURI(uri)
-                mvideoView.requestFocus()
-                mvideoView.start()
+                mvideoView?.setVideoURI(uri)
+                mvideoView?.requestFocus()
+                mvideoView?.start()
             }
 
         }
@@ -76,9 +82,9 @@ class VideoFragment : BaseFragment(), YouTubePlayer.OnInitializedListener {
                 //mYouTubePlayer?.loadVideo(video.videoId)
                 //mYouTubePlayer?.play()
                 val uri:Uri = parse(video.videoId)
-                mvideoView.setVideoURI(uri)
-                mvideoView.requestFocus()
-                mvideoView.start()
+                mvideoView?.setVideoURI(uri)
+                mvideoView?.requestFocus()
+                mvideoView?.start()
             }
         })
         rv_video.adapter = mVideoAdapter
@@ -149,9 +155,9 @@ class VideoFragment : BaseFragment(), YouTubePlayer.OnInitializedListener {
                        // mYouTubePlayer?.cueVideo(mListVideo[0].videoId)
                         val uri:Uri = parse(mListVideo[0].videoId)
                         //Setting MediaController and URI, then starting the videoView
-                        mvideoView.setVideoURI(uri)
-                        mvideoView.requestFocus()
-                        mvideoView.start()
+                        mvideoView?.setVideoURI(uri)
+                        mvideoView?.requestFocus()
+                        mvideoView?.start()
                     }
                 }
             } catch (e: JSONException) {

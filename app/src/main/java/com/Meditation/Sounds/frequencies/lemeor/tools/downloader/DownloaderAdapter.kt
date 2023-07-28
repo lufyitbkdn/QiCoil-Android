@@ -23,7 +23,7 @@ class DownloaderAdapter : RecyclerView.Adapter<DownloaderAdapter.ViewHolder>() {
             field = value
             notifyDataSetChanged()
         }
-    var downloadErrorTracks:List<Int> = ArrayList()
+    var downloadErrorTracks:Set<Int> = HashSet()
         set(value) {
             field = value
             notifyDataSetChanged()

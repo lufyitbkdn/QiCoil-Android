@@ -487,8 +487,8 @@ class PlayerService : Service() {
                     track.duration.takeIf { it>0 }?: exoPlayer.duration
                 )
                 mediaSession.setMetadata(metadataBuilder.build())
-                max.postValue(track.duration)
-                duration.postValue(track.duration)
+//                max.postValue(track.duration)
+//                duration.postValue(track.duration)
             }
         }
 

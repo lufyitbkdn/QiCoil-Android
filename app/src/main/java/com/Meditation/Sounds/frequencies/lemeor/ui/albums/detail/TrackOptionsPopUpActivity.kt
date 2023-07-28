@@ -5,27 +5,31 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-import android.os.Build
 import android.os.Bundle
 import android.util.DisplayMetrics
-import android.util.Log
 import android.view.Gravity
-import android.view.View
 import android.widget.Toast
-import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import com.Meditation.Sounds.frequencies.R
-import com.Meditation.Sounds.frequencies.lemeor.*
+import com.Meditation.Sounds.frequencies.lemeor.FAVORITES
 import com.Meditation.Sounds.frequencies.lemeor.data.database.DataBase
 import com.Meditation.Sounds.frequencies.lemeor.data.database.dao.TrackDao
 import com.Meditation.Sounds.frequencies.lemeor.data.model.Track
+import com.Meditation.Sounds.frequencies.lemeor.getConvertedTime
+import com.Meditation.Sounds.frequencies.lemeor.getPreloadedSaveDir
+import com.Meditation.Sounds.frequencies.lemeor.getSaveDir
 import com.Meditation.Sounds.frequencies.lemeor.tools.downloader.DownloadService
 import com.Meditation.Sounds.frequencies.lemeor.tools.downloader.DownloaderActivity
+import com.Meditation.Sounds.frequencies.lemeor.trackIdForProgram
 import com.Meditation.Sounds.frequencies.utils.Utils
-import kotlinx.android.synthetic.main.activity_pop_up_track_options.*
+import kotlinx.android.synthetic.main.activity_pop_up_track_options.btn_minus
+import kotlinx.android.synthetic.main.activity_pop_up_track_options.btn_plus
+import kotlinx.android.synthetic.main.activity_pop_up_track_options.track_add_favorites
+import kotlinx.android.synthetic.main.activity_pop_up_track_options.track_add_program
+import kotlinx.android.synthetic.main.activity_pop_up_track_options.track_redownload
+import kotlinx.android.synthetic.main.activity_pop_up_track_options.tv_duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
@@ -87,28 +91,29 @@ class TrackOptionsPopUpActivity : AppCompatActivity() {
             return
         }
 
-        GlobalScope.launch {
+        CoroutineScope(Dispatchers.IO).launch {
             track = trackDao?.getTrackById(trackId)
 
-            if(track==null)
-            {
-                finish()
-            }
+            CoroutineScope(Dispatchers.Main).launch {
+                if (track == null) {
+                    finish()
+                }
 
-            if (track!=null && track?.isFavorite!!) {
-                track_add_favorites.text = getString(R.string.tv_remove_from_favorite)
-            } else {
-                track_add_favorites.text = getString(R.string.tv_add_to_favorites)
-            }
+                if (track != null && track?.isFavorite!!) {
+                    track_add_favorites.text = getString(R.string.tv_remove_from_favorite)
+                } else {
+                    track_add_favorites.text = getString(R.string.tv_add_to_favorites)
+                }
 
 
-            val dur = track?.duration!!
-            duration = if (dur > 0) {
-                dur
-            } else {
-                300000
+                val dur = track?.duration!!
+                duration = if (dur > 0) {
+                    dur
+                } else {
+                    300000
+                }
+                tv_duration.text = getConvertedTime(duration)
             }
-            tv_duration.text = getConvertedTime(duration)
         }
 
         track_add_program.setOnClickListener {
@@ -123,12 +128,13 @@ class TrackOptionsPopUpActivity : AppCompatActivity() {
             val programDao = db?.programDao()
 
             if (track?.isFavorite!!) {
-                Toast.makeText(applicationContext, "Removed from Favorites", Toast.LENGTH_SHORT).show()
+                Toast.makeText(applicationContext, "Removed from Favorites", Toast.LENGTH_SHORT)
+                    .show()
             } else {
                 Toast.makeText(applicationContext, "Added to Favorites", Toast.LENGTH_SHORT).show()
             }
 
-            GlobalScope.launch {
+            CoroutineScope(Dispatchers.IO).launch {
                 val program = programDao?.getProgramByName(FAVORITES)
                 if (track?.isFavorite!!) {
                     program?.records?.remove(track?.id!!)
@@ -144,25 +150,41 @@ class TrackOptionsPopUpActivity : AppCompatActivity() {
 
         track_redownload.setOnClickListener {
             if (!Utils.isConnectedToNetwork(applicationContext)) {
-                Toast.makeText(applicationContext, getString(R.string.err_network_available), Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    applicationContext,
+                    getString(R.string.err_network_available),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
             finish()
             val tracks = ArrayList<Track>()
 
             val dao = DataBase.getInstance(applicationContext).albumDao()
 
-            GlobalScope.launch {
+            CoroutineScope(Dispatchers.IO).launch {
 
                 // val track = trackDao.getTrackById(track.id)
 
                 //for preloaded tracks
                 try {
                     track?.let {
-                        val album = it.album?: dao.getAlbumById(it.albumId)
+                        val album = it.album ?: dao.getAlbumById(it.albumId)
                         it.album = album
-                        val file = File(getSaveDir(applicationContext, it.filename, album?.audio_folder?:""))
-                        val preloaded = File(getPreloadedSaveDir(applicationContext, it.filename, album?.audio_folder?:""))
-                        if(!file.exists() && !preloaded.exists()){
+                        val file = File(
+                            getSaveDir(
+                                applicationContext,
+                                it.filename,
+                                album?.audio_folder ?: ""
+                            )
+                        )
+                        val preloaded = File(
+                            getPreloadedSaveDir(
+                                applicationContext,
+                                it.filename,
+                                album?.audio_folder ?: ""
+                            )
+                        )
+                        if (!file.exists() && !preloaded.exists()) {
                             tracks.add(it)
                         }
                         CoroutineScope(Dispatchers.Main).launch {
@@ -170,9 +192,7 @@ class TrackOptionsPopUpActivity : AppCompatActivity() {
                             startActivity(DownloaderActivity.newIntent(applicationContext))
                         }
                     }
-                }
-                catch (ex:Exception)
-                {
+                } catch (ex: Exception) {
                     ex.printStackTrace()
                 }
             }
@@ -197,7 +217,7 @@ class TrackOptionsPopUpActivity : AppCompatActivity() {
 
             if (d < 86400000) {
                 d += 300000
-            } else if (d >= 86400000) {
+            } else {
                 d = 86400000
             }
 
@@ -210,7 +230,7 @@ class TrackOptionsPopUpActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
 
-        GlobalScope.launch { trackDao?.setDuration(duration, track?.id!!) }
+        CoroutineScope(Dispatchers.IO).launch { trackDao?.setDuration(duration, track?.id!!) }
     }
 
     companion object {

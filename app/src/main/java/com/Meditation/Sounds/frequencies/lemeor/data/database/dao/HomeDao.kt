@@ -13,5 +13,5 @@ interface HomeDao {
     fun getHome() : LiveData<HomeResponse>
 
     @Query("DELETE FROM home")
-    fun clear()
+    suspend fun clear()
 }

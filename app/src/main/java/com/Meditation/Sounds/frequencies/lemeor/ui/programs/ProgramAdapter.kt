@@ -13,8 +13,7 @@ import kotlinx.android.synthetic.main.item_program.view.*
 import java.util.*
 
 class ProgramAdapter(
-        private val mContext: Context,
-        private var mData: List<Program>
+    private var mData: List<Program> = listOf()
 ) : RecyclerView.Adapter<ProgramAdapter.ViewHolder>() {
 
     interface Listener {
@@ -29,7 +28,9 @@ class ProgramAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        return ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_program, parent, false))
+        return ViewHolder(
+            LayoutInflater.from(parent.context).inflate(R.layout.item_program, parent, false)
+        )
     }
 
     override fun getItemCount(): Int {
@@ -40,7 +41,10 @@ class ProgramAdapter(
         val program = mData[position]
 
         holder.itemView.item_program_name.text = program.name
-        holder.itemView.item_program_duration.text = mContext.getString(R.string.total_time, getConvertedTime((program.records.size * 300000).toLong()))
+        holder.itemView.item_program_duration.text = holder.itemView.context.getString(
+            R.string.total_time,
+            getConvertedTime((program.records.size * 300000).toLong())
+        )
 
         if (program.isMy) {
             if (program.name == FAVORITES) {
@@ -59,11 +63,19 @@ class ProgramAdapter(
             }
         }
 
-        holder.itemView.item_program_delete.setOnClickListener { mListener?.onDeleteItem(program, position) }
+        holder.itemView.item_program_delete.setOnClickListener {
+            mListener?.onDeleteItem(
+                program,
+                position
+            )
+        }
         holder.itemView.setOnClickListener { mListener?.onClickItem(program, position) }
 
-        if (position == mData.size - 1) { holder.itemView.program_divider_favorites.visibility = View.INVISIBLE }
-        else { holder.itemView.program_divider_favorites.visibility = View.VISIBLE }
+        if (position == mData.size - 1) {
+            holder.itemView.program_divider_favorites.visibility = View.INVISIBLE
+        } else {
+            holder.itemView.program_divider_favorites.visibility = View.VISIBLE
+        }
     }
 
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView)

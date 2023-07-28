@@ -9,10 +9,10 @@ android {
 
     signingConfigs {
         qicoilrelease {
-            storeFile file( '/Users/administrator/StudioProjects/qicoil/keystore/qicoil.jks')
-            storePassword var2
-            keyAlias var1
-            keyPassword var
+            storeFile file( '../keystore/quantum.jks')
+            storePassword '123456'
+            keyAlias 'quantumfrequencies'
+            keyPassword '123456'
         }
     }
     compileSdkVersion 33
@@ -87,6 +87,7 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            debuggable true
         }
     }
 

@@ -536,10 +536,12 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
         //albums search
         mAlbumsSearchAdapter.setOnClickListener(object : AlbumsSearchAdapter.Listener {
             override fun onAlbumSearchClick(album: Album, i: Int) {
+                hideKeyboard(this@NavigationActivity, album_search)
                 view_data.visibility = View.GONE
                 startAlbumDetails(album)
             }
         })
+
         search_albums_recycler.adapter = mAlbumsSearchAdapter
         search_albums_recycler.setHasFixedSize(true)
         search_albums_recycler.itemAnimator = null
@@ -547,10 +549,13 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
         //track search
         mTracksSearchAdapter.setOnClickListener(object : TracksSearchAdapter.Listener {
             override fun onTrackSearchClick(track: Track, i: Int) {
+                hideKeyboard(this@NavigationActivity, album_search)
                 CoroutineScope(Dispatchers.IO).launch {
-                    view_data.visibility = View.GONE
                     val album = mViewModel.getAlbumById(track.albumId)
-                    CoroutineScope(Dispatchers.Main).launch { album?.let { startAlbumDetails(it) } }
+                    CoroutineScope(Dispatchers.Main).launch {
+                        view_data.visibility = View.GONE
+                        album?.let { startAlbumDetails(it) }
+                    }
                 }
             }
         })
@@ -561,6 +566,7 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
         //program search
         mProgramsSearchAdapter.setOnClickListener(object : ProgramsSearchAdapter.Listener {
             override fun onProgramSearchClick(program: Program, i: Int) {
+                hideKeyboard(this@NavigationActivity, album_search)
                 view_data.visibility = View.GONE
                 if (program.isUnlocked) {
                     if (isTrackAdd && trackIdForProgram != -1) {
@@ -634,7 +640,8 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
                 lblheaderalbums.visibility = View.GONE
                 if (mAlbumsSearchAdapter.itemCount == 0
                     && mProgramsSearchAdapter.itemCount == 0
-                    && mTracksSearchAdapter.itemCount == 0)
+                    && mTracksSearchAdapter.itemCount == 0
+                )
                     lblnoresult.visibility = View.VISIBLE
             }
 
@@ -689,9 +696,9 @@ class NavigationActivity : AppCompatActivity(), OnNavigationItemSelectedListener
             val tracks = mViewModel.searchTrack("%$s%")
             val programs = mViewModel.searchProgram("%$s%")
             CoroutineScope(Dispatchers.Main).launch {
-                albumsSearch.value = albums!!
-                tracksSearch.value = tracks!!
-                programsSearch.value = programs!!
+                albumsSearch.value = albums
+                tracksSearch.value = tracks
+                programsSearch.value = programs
             }
         }
     }

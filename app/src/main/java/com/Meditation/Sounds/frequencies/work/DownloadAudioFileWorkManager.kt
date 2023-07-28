@@ -32,7 +32,7 @@ class DownLoadCourseAudioWorkManager(
         val fileName = inputData.getString(FILE_NAME) ?: ""
         val trackId = inputData.getInt(TRACK_ID, 0)
         val tmpFile = File(getTempFile(context, fileName, albumName))
-        return try {
+        try {
             if (url != null) {
                 val targetFile = File(getSaveDir(context, fileName, albumName))
                 var percentage = 0L
@@ -74,7 +74,7 @@ class DownLoadCourseAudioWorkManager(
             }
         } catch (e: Throwable) {
             e.printStackTrace()
-            Result.failure(
+            return Result.failure(
                 workDataOf(
                     ERROR to e,
                     TRACK_ID to trackId
@@ -109,9 +109,6 @@ class DownLoadCourseAudioWorkManager(
                     .setInputData(inputData.build())
                     .addTag(getTag(trackId = track.id))
                     .addTag(TAG)
-                    .setConstraints(
-                        Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-                    )
                     .build()
 
             WorkManager

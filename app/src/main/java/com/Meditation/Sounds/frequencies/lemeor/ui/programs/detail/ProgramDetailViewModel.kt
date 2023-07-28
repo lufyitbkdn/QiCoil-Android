@@ -11,7 +11,7 @@ class ProgramDetailViewModel (private val repository: ProgramDetailRepository) :
         return repository.getProgramById(id)
     }
 
-    fun getTrackById(id: Int): Track? {
+    suspend fun getTrackById(id: Int): Track? {
         return repository.getTrackById(id)
     }
 }

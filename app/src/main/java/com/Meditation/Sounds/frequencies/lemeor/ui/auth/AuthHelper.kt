@@ -1,10 +1,10 @@
 package com.Meditation.Sounds.frequencies.lemeor.ui.auth
 
 import android.content.Context
-import android.util.Log
 import com.Meditation.Sounds.frequencies.lemeor.data.database.DataBase
 import com.Meditation.Sounds.frequencies.lemeor.data.model.User
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 fun updateUnlocked(context: Context, user: User, isUnlocked: Boolean) {
@@ -14,7 +14,7 @@ fun updateUnlocked(context: Context, user: User, isUnlocked: Boolean) {
 
     val db = DataBase.getInstance(context)
 
-    GlobalScope.launch {
+    CoroutineScope(Dispatchers.IO).launch {
         tiers.forEach { tier->
             if (tier >= 3) { db.tierDao().updateShowStatus(isUnlocked, tier) }
 
@@ -32,7 +32,7 @@ fun updateUnlocked(context: Context, user: User, isUnlocked: Boolean) {
 }
 
 fun updateTier(context: Context, user: User) {
-    GlobalScope.launch {
+    CoroutineScope(Dispatchers.IO).launch {
         val db = DataBase.getInstance(context)
         val tierDao = db.tierDao()
 
