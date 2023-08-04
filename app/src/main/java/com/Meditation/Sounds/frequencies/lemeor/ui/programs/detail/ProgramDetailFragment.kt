@@ -301,7 +301,7 @@ class ProgramDetailFragment : Fragment() {
                     File(getSaveDir(requireContext(), t.filename, t.album?.audio_folder ?: ""))
                 val track = db.trackDao().getTrackById(t.id)
                 if (track?.duration == 0.toLong()) {
-                    track.duration = getDuration(file)
+//                    track.duration = getDuration(file)
                 }
                 data.add(
                     MusicRepository.Track(
@@ -326,13 +326,13 @@ class ProgramDetailFragment : Fragment() {
         }
     }
 
-    private fun getDuration(file: File): Long {
-        val mediaMetadataRetriever = MediaMetadataRetriever()
-        mediaMetadataRetriever.setDataSource(file.absolutePath)
-        val durationStr =
-            mediaMetadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-        return durationStr?.toLong() ?: 0L
-    }
+//    private fun getDuration(file: File): Long {
+//        val mediaMetadataRetriever = MediaMetadataRetriever()
+//        mediaMetadataRetriever.setDataSource(file.absolutePath)
+//        val durationStr =
+//            mediaMetadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+//        return durationStr?.toLong() ?: 0L
+//    }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)

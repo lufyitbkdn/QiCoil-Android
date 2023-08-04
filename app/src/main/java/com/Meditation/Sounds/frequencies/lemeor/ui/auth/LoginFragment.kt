@@ -87,8 +87,8 @@ class LoginFragment : Fragment() {
         mTvSignUp.text = Html.fromHtml(getString(R.string.tv_link_sign_up))
         mTvForgotPassword.text = Html.fromHtml(getString(R.string.tv_forgotten_password))
         if (com.Meditation.Sounds.frequencies.BuildConfig.DEBUG) {
-            //        mEdEmailSignIn.setText("kevintest@gmail.com")
-//        mEdPasswordSignIn.setText("12345678")
+                    mEdEmailSignIn.setText("kevintest@gmail.com")
+        mEdPasswordSignIn.setText("12345678")
 //        mEdEmailSignIn.setText("manufacturing@qilifestore.com")
 //        mEdPasswordSignIn.setText("12345678")
 //        mEdPasswordSignIn.setText("1234test")
@@ -98,8 +98,8 @@ class LoginFragment : Fragment() {
 //            mEdPasswordSignIn.setText("12345678")
 //        mEdEmailSignIn.setText("lailani.raphaell@gmail.com")
 //        mEdPasswordSignIn.setText("lailani1234")
-            mEdEmailSignIn.setText("tester02@yopmail.com")
-             mEdPasswordSignIn.setText("12345678")
+//            mEdEmailSignIn.setText("tester02@yopmail.com")
+//             mEdPasswordSignIn.setText("12345678")
         }
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
