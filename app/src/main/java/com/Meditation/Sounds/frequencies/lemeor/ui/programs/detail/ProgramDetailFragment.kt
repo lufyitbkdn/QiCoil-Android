@@ -297,12 +297,12 @@ class ProgramDetailFragment : Fragment() {
 
         CoroutineScope(Dispatchers.IO).launch {
             tracks.forEach { t ->
-                val file =
-                    File(getSaveDir(requireContext(), t.filename, t.album?.audio_folder ?: ""))
-                val track = db.trackDao().getTrackById(t.id)
-                if (track?.duration == 0.toLong()) {
+//                val file =
+//                    File(getSaveDir(requireContext(), t.filename, t.album?.audio_folder ?: ""))
+//                val track = db.trackDao().getTrackById(t.id)
+//                if (track?.duration == 0.toLong()) {
 //                    track.duration = getDuration(file)
-                }
+//                }
                 data.add(
                     MusicRepository.Track(
                         t.id,
@@ -322,6 +322,7 @@ class ProgramDetailFragment : Fragment() {
 
             CoroutineScope(Dispatchers.Main).launch {
                 activity.showPlayerUI()
+
             }
         }
     }
