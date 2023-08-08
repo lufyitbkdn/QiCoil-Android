@@ -174,38 +174,37 @@ class NewAlbumDetailFragment : Fragment() {
     }
 
     private fun playAndDownload(album: Album) {
-            firebaseAnalytics.logEvent("Downloads") {
-                param("Album Id", album.id.toString())
-                param("Album Name", album.name)
-                // param(FirebaseAnalytics.Param.CONTENT_TYPE, "image")
-            }
-            if (Utils.isConnectedToNetwork(requireContext())) {
+        firebaseAnalytics.logEvent("Downloads") {
+            param("Album Id", album.id.toString())
+            param("Album Name", album.name)
+            // param(FirebaseAnalytics.Param.CONTENT_TYPE, "image")
+        }
+        if (Utils.isConnectedToNetwork(requireContext())) {
 
-                val tracks = ArrayList<Track>()
-                val trackDao = DataBase.getInstance(requireContext()).trackDao()
+            val tracks = ArrayList<Track>()
+            val trackDao = DataBase.getInstance(requireContext()).trackDao()
 
-                CoroutineScope(Dispatchers.IO).launch {
-                    album.tracks.forEach { t ->
-                        val track = trackDao.getTrackById(t.id)
-                        val file = File(getSaveDir(requireContext(), t.filename, album.audio_folder))
-                        val preloaded = File(getPreloadedSaveDir(requireContext(), t.filename, album.audio_folder))
+            CoroutineScope(Dispatchers.IO).launch {
+                album.tracks.forEach { t ->
+                    val file = File(getSaveDir(requireContext(), t.filename, album.audio_folder))
+                    val preloaded =
+                        File(getPreloadedSaveDir(requireContext(), t.filename, album.audio_folder))
 
-                        if (!file.exists() && !preloaded.exists()) {
-                            trackDao.isTrackDownloaded(true, track?.id ?: 0)
-                            track?.isDownloaded = false
-                            track?.let { tracks.add(it) }
-                        }
-                        t.album = album
+                    if (!file.exists() && !preloaded.exists()) {
+                        trackDao.isTrackDownloaded(true, t.id)
+                        t.isDownloaded = false
                     }
-
-                    CoroutineScope(Dispatchers.Main).launch {
-                        activity?.let {
-                            DownloaderActivity.startDownload(it, tracks)
-                        }
-                    }
-
+                    t.album = album
                 }
+
+                CoroutineScope(Dispatchers.Main).launch {
+                    activity?.let {
+                        DownloaderActivity.startDownload(it, tracks)
+                    }
+                }
+
             }
+        }
         play(album)
         EventBus.getDefault().post(PlayerSelected(0))
     }
